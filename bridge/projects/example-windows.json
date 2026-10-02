@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "project_id": "hellowasteland",
+  "launcher": "native",
+  "game_root": "C:/Program Files (x86)/Steam/steamapps/common/Fallout New Vegas",
+  "plugin": "HelloWasteland.esp",
+  "records": [],
+  "state_dir": "../state",
+  "helper": "../Probe.Mcp.exe",
+  "spec": "../examples/hello-wasteland.spec.json"
+}

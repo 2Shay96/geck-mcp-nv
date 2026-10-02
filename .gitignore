@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+bridge/state/
+bridge/build/
+bridge/evidence/
+bridge/photos/
+bridge/projects/*.json
+!bridge/projects/example-*.json
+windows/backups/
+windows/screenshots/
+.DS_Store

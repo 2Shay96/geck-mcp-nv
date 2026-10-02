@@ -1,0 +1,216 @@
+{
+ "schema": 1,
+ "project_id": "hellowasteland",
+ "plugin": "HelloWasteland.esp",
+ "author": "GECK MCP example",
+ "description": "Hello Wasteland: a small interior cell with three flashing lights, a tiled floor and two fire barrels. Vanilla assets only.",
+ "masters": [
+  "FalloutNV.esm"
+ ],
+ "records": {
+  "HelloRedFlash": {
+   "type": "LIGH",
+   "radius": 450,
+   "color": [
+    255,
+    30,
+    40
+   ],
+   "flags": [
+    "dynamic",
+    "pulse"
+   ],
+   "falloff": 1.0,
+   "fov": 90.0,
+   "fade": 1.0
+  },
+  "HelloBlueFlash": {
+   "type": "LIGH",
+   "radius": 450,
+   "color": [
+    30,
+    80,
+    255
+   ],
+   "flags": [
+    "dynamic",
+    "pulse_slow"
+   ],
+   "falloff": 1.0,
+   "fov": 90.0,
+   "fade": 1.0
+  },
+  "HelloGoldFlash": {
+   "type": "LIGH",
+   "radius": 450,
+   "color": [
+    255,
+    160,
+    30
+   ],
+   "flags": [
+    "dynamic",
+    "flicker"
+   ],
+   "falloff": 1.0,
+   "fov": 90.0,
+   "fade": 1.0
+  }
+ },
+ "cells": {
+  "HelloWasteland": {
+   "name": "Hello Wasteland",
+   "lighting": {
+    "ambient": [
+     20,
+     20,
+     28
+    ],
+    "directional": [
+     12,
+     12,
+     18
+    ],
+    "fog_color": [
+     0,
+     0,
+     0
+    ],
+    "fog_near": 0.0,
+    "fog_far": 10000.0,
+    "clip_distance": 10000.0,
+    "directional_fade": 1.0,
+    "fog_power": 1.0
+   },
+   "objects": [
+    {
+     "ref_id": "light.red",
+     "base": "@HelloRedFlash",
+     "position": [
+      -190,
+      0,
+      180
+     ]
+    },
+    {
+     "ref_id": "light.blue",
+     "base": "@HelloBlueFlash",
+     "position": [
+      190,
+      0,
+      180
+     ]
+    },
+    {
+     "ref_id": "light.gold",
+     "base": "@HelloGoldFlash",
+     "position": [
+      0,
+      190,
+      200
+     ]
+    },
+    {
+     "ref_id": "floor.sw",
+     "base": "@FacRmFloor01",
+     "position": [
+      -256,
+      -256,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.w",
+     "base": "@FacRmFloor01",
+     "position": [
+      -256,
+      0,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.nw",
+     "base": "@FacRmFloor01",
+     "position": [
+      -256,
+      256,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.s",
+     "base": "@FacRmFloor01",
+     "position": [
+      0,
+      -256,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.c",
+     "base": "@FacRmFloor01",
+     "position": [
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.n",
+     "base": "@FacRmFloor01",
+     "position": [
+      0,
+      256,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.se",
+     "base": "@FacRmFloor01",
+     "position": [
+      256,
+      -256,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.e",
+     "base": "@FacRmFloor01",
+     "position": [
+      256,
+      0,
+      0
+     ]
+    },
+    {
+     "ref_id": "floor.ne",
+     "base": "@FacRmFloor01",
+     "position": [
+      256,
+      256,
+      0
+     ]
+    },
+    {
+     "ref_id": "barrel.left",
+     "base": "@Barrel02Fire256",
+     "position": [
+      -170,
+      0,
+      0
+     ]
+    },
+    {
+     "ref_id": "barrel.right",
+     "base": "@Barrel02Fire256",
+     "position": [
+      170,
+      0,
+      0
+     ]
+    }
+   ]
+  }
+ },
+ "release": {}
+}
