@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+### bridge/
+- Fixed on native Windows: plugin load failed with `MODAL_BLOCKED` because GECK's Data dialog stayed hidden; the helper
+  now shows it.
+- Fixed on native Windows: Data list checkboxes did not toggle (and a sent click could stall GECK until the mouse moved);
+  the helper now posts the double-click with the cursor parked over the row. Wine/CrossOver behaviour is unchanged.
+- First Windows 11 end-to-end run (status, build, install, live load, cell verify): see `docs/TESTING.md`.
+
 ## 0.1.0: WIP prototype (2026-10-02)
 First public release, as a work-in-progress prototype.
 

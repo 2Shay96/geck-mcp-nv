@@ -31,6 +31,9 @@ class Probe {
     [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr n, out UIntPtr written);
     [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr n, out UIntPtr read);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr p);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
+    [DllImport("kernel32.dll",CharSet=CharSet.Ansi)] static extern IntPtr GetProcAddress(IntPtr module,string name);
+    static bool OnWine() { IntPtr ntdll=GetModuleHandle("ntdll.dll"); return ntdll!=IntPtr.Zero&&GetProcAddress(ntdll,"wine_get_version")!=IntPtr.Zero; }
 
     [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint flags);
@@ -48,6 +51,7 @@ class Probe {
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h,out RECT rect);
     [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr h,ref POINT point);
     [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
     [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
@@ -541,9 +545,14 @@ class Probe {
     static string DataOpenInspect(out string before) {
         GuardDialogs();before="{\"editorTitle\":"+J(MainWindow().Text)+",\"windows\":"+TopWindows()+"}";
         PostCommand(MainWindow().Handle,ResourceCommand("MAINMENU","&Data..."),IntPtr.Zero);
+        bool forced=false;
         var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<5000){System.Threading.Thread.Sleep(100);Discover();
+            // Native Windows: the modal Data dialog opened by a posted command can stay hidden until GECK gets
+            // user input (seen on Windows 11). If exactly one hidden Data dialog owned by the editor exists, show it.
+            if(!forced&&wait.ElapsedMilliseconds>=500){IntPtr main=MainWindow().Handle;var hidden=windows.FindAll(w=>w.Parent==IntPtr.Zero&&!w.Visible&&w.ClassName=="#32770"&&w.Text=="Data"&&w.Owner==main);
+                if(hidden.Count==1){ShowWindow(hidden[0].Handle,5);forced=true;continue;}}
             var dialogs=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="#32770"&&!IsPreview(w));
-            if(dialogs.Count==1)return "{\"dialog\":"+WindowJson(dialogs[0])+",\"inventory\":"+Inspect(500)+"}";
+            if(dialogs.Count==1)return "{\"dialog\":"+WindowJson(dialogs[0])+",\"forcedShow\":"+(forced?"true":"false")+",\"inventory\":"+Inspect(500)+"}";
             if(dialogs.Count>1)throw new Exception("Data command produced multiple dialogs");
         }throw new Exception("Data command dispatched but no dialog appeared");
     }
@@ -573,10 +582,27 @@ class Probe {
         Msg(list.Handle,0x1013,(IntPtr)row,(IntPtr)1);
         RECT rect=ListItemRect(list,row);int x=rect.Left+50,y=(rect.Top+rect.Bottom)/2;
         IntPtr point=(IntPtr)((y<<16)|(x&0xffff));
-        Msg(list.Handle,0x201,(IntPtr)1,point);Msg(list.Handle,0x202,IntPtr.Zero,point);
-        Msg(list.Handle,0x203,(IntPtr)1,point);Msg(list.Handle,0x202,IntPtr.Zero,point);
-        var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<2000){if(ListImage(list,row)==1-old)return;System.Threading.Thread.Sleep(50);}
-        throw new Exception("Data row toggle did not change actual image state");
+        if(OnWine()){
+            // CrossOver/Wine (tested on macOS): a sent double-click toggles the row.
+            Msg(list.Handle,0x201,(IntPtr)1,point);Msg(list.Handle,0x202,IntPtr.Zero,point);
+            Msg(list.Handle,0x203,(IntPtr)1,point);Msg(list.Handle,0x202,IntPtr.Zero,point);
+            var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<2000){if(ListImage(list,row)==1-old)return;System.Threading.Thread.Sleep(50);}
+            throw new Exception("Data row toggle did not change actual image state");
+        }
+        // Native Windows (tested on Windows 11): a sent double-click changes nothing, because GECK hit-tests the
+        // cursor position of the message, and a sent button-down can block inside the list's drag detection until
+        // the real mouse moves. So park the cursor over the row (no real click) and post the four messages: they
+        // queue like real input (the button-up ends drag detection) and carry the parked cursor position.
+        POINT saved;bool restore=GetCursorPos(out saved);POINT screen=new POINT{X=x,Y=y};
+        if(!ClientToScreen(list.Handle,ref screen)||!SetCursorPos(screen.X,screen.Y))throw new Exception("Data row cursor positioning failed");
+        try {System.Threading.Thread.Sleep(50);
+            if(!PostMessage(list.Handle,0x201,(IntPtr)1,point)||!PostMessage(list.Handle,0x202,IntPtr.Zero,point)||
+               !PostMessage(list.Handle,0x203,(IntPtr)1,point)||!PostMessage(list.Handle,0x202,IntPtr.Zero,point))
+                throw new Exception("Data row click post failed");
+            var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<2000){if(ListImage(list,row)==1-old)break;System.Threading.Thread.Sleep(50);}
+            System.Threading.Thread.Sleep(150);   // let the queued button-up drain before the cursor moves away
+        } finally {if(restore)SetCursorPos(saved.X,saved.Y);}
+        if(ListImage(list,row)!=1-old)throw new Exception("Data row toggle did not change actual image state");
     }
     static string DataConfigure(string plugin,out string before) {
         if(plugin!=ExpectedPlugin())throw new Exception("plugin does not match project configuration");
