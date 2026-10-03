@@ -6,6 +6,7 @@ bridge/state/
 bridge/build/
 bridge/evidence/
 bridge/photos/
+bridge/tools/photo/bin/
 bridge/projects/*.json
 !bridge/projects/example-*.json
 windows/backups/
