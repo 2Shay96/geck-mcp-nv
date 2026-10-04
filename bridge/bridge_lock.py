@@ -1,6 +1,6 @@
 """One advisory lock for every cooperating bridge process that targets the same GECK install.
 
-macOS/Linux use flock; Windows uses msvcrt.locking (UNTESTED on Windows).
+macOS/Linux use flock; Windows uses msvcrt.locking (used in the Windows 11 run).
 """
 from contextlib import contextmanager
 import getpass

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1: first Windows-tested release (2026-10-03)
 ### bridge/
 - Fixed on native Windows: plugin load failed with `MODAL_BLOCKED` because GECK's Data dialog stayed hidden; the helper
   now shows it.

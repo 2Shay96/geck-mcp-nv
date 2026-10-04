@@ -16,9 +16,9 @@ class Project(BaseModel):
     schema_version: int = Field(default=1, ge=1, le=1)
     project_id: str = Field(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
     # How the 32-bit helper is started next to GECK:
-    #   crossover: CrossOver on macOS (the only launcher tested end to end so far)
+    #   crossover: CrossOver on macOS (tested end to end)
     #   wine:      plain Wine or Proton on Linux; `bottle` is the WINEPREFIX GECK runs in (UNTESTED)
-    #   native:    Windows; the helper .exe runs directly, no Wine (UNTESTED)
+    #   native:    Windows; the helper .exe runs directly, no Wine (tested end to end on Windows 11)
     launcher: Literal['crossover', 'wine', 'native'] = 'crossover'
     wine: Path | None = None
     bottle: Path | None = None

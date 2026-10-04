@@ -3,7 +3,7 @@
     python build_helper.py --project projects/my_mod.json
 
 crossover/wine: runs csc.exe inside the configured bottle/prefix.
-native (Windows): runs %WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe directly (UNTESTED).
+native (Windows): runs %WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe directly (tested on Windows 11).
 A prebuilt Probe.Mcp.exe ships with the release; rebuild only after changing Probe.cs.
 """
 import argparse

@@ -2,7 +2,7 @@
 
 > Actor photos (macOS only for now): [PHOTO.md](PHOTO.md). Persistent helper: [M1-FAST-BRIDGE.md](M1-FAST-BRIDGE.md).
 
-This is a local stdio MCP server for the 32-bit Fallout New Vegas GECK. It was developed and tested under CrossOver on macOS; the Windows (`launcher: native`) and Linux (`launcher: wine`) paths are untested. It loads configured plugins with exactly FalloutNV.esm as master and edits configured existing STAT model fields. Record creation, cell placement, animation checks, and gameplay checks remain unsupported.
+This is a local stdio MCP server for the 32-bit Fallout New Vegas GECK. It was developed under CrossOver on macOS and is tested end to end on Windows 11 (`launcher: native`); the Linux (`launcher: wine`) path is untested. It loads configured plugins with exactly FalloutNV.esm as master and edits configured existing STAT model fields. Record creation, cell placement, animation checks, and gameplay checks remain unsupported.
 
 ## Helper transport
 
