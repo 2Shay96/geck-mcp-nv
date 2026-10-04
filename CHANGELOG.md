@@ -7,6 +7,7 @@
 - Fixed on native Windows: Data list checkboxes did not toggle (and a sent click could stall GECK until the mouse moved);
   the helper now posts the double-click with the cursor parked over the row. Wine/CrossOver behaviour is unchanged.
 - First Windows 11 end-to-end run (status, build, install, live load, cell verify): see `docs/TESTING.md`.
+- The Nexus download is source only (no `.exe`): build `Probe.Mcp.exe` with `build_helper.py`. GitHub keeps the prebuilt helper.
 
 ## 0.1.0: WIP prototype (2026-10-02)
 First public release, as a work-in-progress prototype.

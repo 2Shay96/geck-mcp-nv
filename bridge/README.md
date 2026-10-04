@@ -35,14 +35,20 @@ python3 -m venv .venv
    .venv/bin/python esm_index.py FalloutNV.esm
    ```
 2. **Make a profile.** Copy `projects/example-<your OS>.json` to `projects/hellowasteland.json` and fix the paths.
-3. **Register the MCP server** in your client:
+3. **Build the helper if it is missing.** The Nexus download ships source only (no `.exe`, to avoid antivirus false
+   positives); the GitHub repo includes a prebuilt `Probe.Mcp.exe`. On Windows this uses the C# compiler that comes with
+   the .NET Framework 4 (already part of Windows):
+   ```sh
+   .venv\Scripts\python build_helper.py --project projects\hellowasteland.json
+   ```
+4. **Register the MCP server** in your client:
    ```json
    "geck": {
      "command": "/path/to/bridge/.venv/bin/python",
      "args": ["/path/to/bridge/run_mcp.py", "--project", "/path/to/bridge/projects/hellowasteland.json"]
    }
    ```
-4. Ask your agent: *"Validate the spec, build the plugin and show me what it contains."*
+5. Ask your agent: *"Validate the spec, build the plugin and show me what it contains."*
    This uses `geck_spec_validate`, then `geck_plugin_build`, then `geck_plugin_inspect`, and touches nothing in the game.
 
 ## The 24 tools

@@ -29,8 +29,10 @@ fights the player in game.
 
 1. Read [`bridge/README.md`](bridge/README.md) (any OS), [`windows/README.md`](windows/README.md) (Windows), or both.
 2. Install Python 3.12+ and create a virtual environment in the folder you'll use.
-3. Register the server in your MCP client (examples are in each README).
-4. First prompt: *"Run geck_status (or geck_doctor) and tell me what you see. Don't change anything."*
+3. Nexus download: build the GECK helper once with `build_helper.py` (see [`bridge/README.md`](bridge/README.md), step 3).
+   The download contains source only, no `.exe`; GitHub has a prebuilt one.
+4. Register the server in your MCP client (examples are in each README).
+5. First prompt: *"Run geck_status (or geck_doctor) and tell me what you see. Don't change anything."*
 
 ## Requirements
 
