@@ -26,7 +26,8 @@ edits bytes of the existing subrecord in place: [[offset, struct_format, value],
 "@EditorID" values anywhere are resolved to FormIDs (own records or indexed masters).
 
 Templates are FNVEdit-style dumps written by tools/esm_research.py ("dump"); their FormIDs are
-master-relative, so the template's master must be the plugin's first master.
+master-relative, so the template's master must be the plugin's first master. They are looked up in
+the project's <state_dir>/templates first, then in this repo's state/templates (template_dirs()).
 
 Scripts: {"type": "SCPT", "source": "scripts/X.gek", "script_type": "object"|"quest"|"effect"}.
 The source text is stored in SCTX (CRLF). Compiled data (SCHR/SCDA/SLSD/SCVR/SCRO/SCRV) comes
@@ -44,20 +45,32 @@ from .records import SpecError, check_edid, record
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = ROOT / 'state' / 'templates'
-GENERIC_TYPES = {'CREA', 'WEAP', 'ACTI', 'SOUN', 'QUST', 'PACK', 'MESG', 'FLST', 'MISC', 'GLOB',
+GENERIC_TYPES = {'CREA', 'WEAP', 'ACTI', 'SOUN', 'QUST', 'PACK', 'MESG', 'FLST', 'MISC', 'GLOB', 'ALCH',
                  'FACT', 'CONT', 'SPEL', 'MGEF', 'ENCH', 'EXPL', 'PROJ', 'SCPT', 'VTYP'}
 SCRIPT_TYPES = {'object': 0, 'quest': 1, 'effect': 0x100}
 VALUE_KEYS = ('text', 'texts', 'form', 'forms', 'hex', 'u8', 'u16', 'u32', 's32', 'float', 'pack', 'empty')
 COMPILED_TAGS = ('SCHR', 'SCDA', 'SCTX', 'SLSD', 'SCVR', 'SCRO', 'SCRV')
 
 
-def load_template(name, master='FalloutNV.esm'):
+def template_dirs(state_dir=None):
+    """Template folders in lookup order: <state_dir>/templates first, then the code root's state/templates."""
+    dirs = []
+    for folder in ([Path(state_dir) / 'templates'] if state_dir else []) + [TEMPLATE_DIR]:
+        if all(folder.resolve() != d.resolve() for d in dirs):
+            dirs.append(folder)
+    return dirs
+
+
+def load_template(name, master='FalloutNV.esm', dirs=None):
     if ':' in name:
         master, name = name.split(':', 1)
-    path = TEMPLATE_DIR / master / (name + '.json')
-    if not path.exists():
-        raise SpecError('template', 'no template dump %s (run tools/esm_research.py dump)' % path)
-    return master, json.loads(path.read_text())
+    tried = []
+    for folder in dirs or [TEMPLATE_DIR]:
+        path = Path(folder) / master / (name + '.json')
+        if path.exists():
+            return master, json.loads(path.read_text())
+        tried.append(str(path))
+    raise SpecError('template', 'no template dump %s (run tools/esm_research.py dump)' % ' or '.join(tried))
 
 
 def _resolve(resolver, value, where):
@@ -148,7 +161,7 @@ def apply_fields(subs, fields, resolver, where):
     return subs
 
 
-def build_generic(form_id, edid, spec, resolver, where=None, masters=None):
+def build_generic(form_id, edid, spec, resolver, where=None, masters=None, templates=None):
     where = where or 'records.%s' % edid
     check_edid(edid, where)
     rtype = spec['type']
@@ -158,7 +171,7 @@ def build_generic(form_id, edid, spec, resolver, where=None, masters=None):
         raise SpecError(where, 'unknown field(s): %s' % ', '.join(sorted(unknown)))
     subs = []
     if spec.get('template'):
-        master, tpl = load_template(spec['template'])
+        master, tpl = load_template(spec['template'], dirs=templates)
         if tpl['type'] != rtype:
             raise SpecError(where + '.template', '%s is a %s, not a %s' % (spec['template'], tpl['type'], rtype))
         if masters is not None and (not masters or masters[0].lower() != master.lower()):

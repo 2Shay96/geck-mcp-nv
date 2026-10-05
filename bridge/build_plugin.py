@@ -1,11 +1,14 @@
 """Build a plugin from a spec, offline. Never touches the game's Data folder.
 
     python3 build_plugin.py projects/coolworld.spec.json [--adopt existing.esp] [--compare other.esp]
+    python3 build_plugin.py --project projects/my_mod.json [--dry-run]
 
-Outputs build/<Plugin>.esp and build/<Plugin>.receipt.json, and saves the
-project's FormID map in state/formids/<project_id>.json. --adopt seeds FormIDs
-from a hand-built plugin (first build only). --compare prints a record-level diff.
-Standard library only.
+Outputs <state>/../build/<Plugin>.esp and <Plugin>.receipt.json (the same folder the MCP tools use),
+and saves the project's FormID map in <state>/formids/<project_id>.json. <state> is --state, else the
+--project profile's state_dir, else this folder's state/. Record templates and master indexes are read
+from <state> first, then from this folder's state/. --adopt seeds FormIDs from a hand-built plugin
+(first build only). --compare prints a record-level diff. Standard library only (plus pydantic with
+--project).
 """
 import argparse
 import json
@@ -14,7 +17,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from geck_mcp.esp import build as builder, diff  # noqa: E402
+from geck_mcp.authoring import index_files  # noqa: E402
+from geck_mcp.esp import build as builder, diff, generic  # noqa: E402
 from geck_mcp.esp.formids import FormIdMap, MasterIndex  # noqa: E402
 from geck_mcp.esp.records import SpecError  # noqa: E402
 from geck_mcp.esp.validate import validate  # noqa: E402
@@ -33,14 +37,24 @@ def data_dir_for(spec):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('spec', type=Path)
+    parser.add_argument('spec', type=Path, nargs='?', help='spec file (default: the --project profile\'s spec)')
+    parser.add_argument('--project', type=Path, help='project profile: supplies spec, state folder and Data folder')
     parser.add_argument('--adopt', type=Path, help='seed FormIDs from an existing plugin')
     parser.add_argument('--compare', type=Path, help='diff the result against another plugin')
-    parser.add_argument('--out', type=Path, default=ROOT / 'build')
-    parser.add_argument('--state', type=Path, default=ROOT / 'state')
+    parser.add_argument('--out', type=Path, help='output folder (default: <state>/../build)')
+    parser.add_argument('--state', type=Path, help='state folder (default: the profile\'s state_dir, else ./state)')
     parser.add_argument('--dry-run', action='store_true', help='do not save the FormID map or outputs')
     parser.add_argument('--no-assets', action='store_true', help='skip mesh/texture checks')
     args = parser.parse_args()
+    project = None
+    if args.project:
+        from geck_mcp.config import Project
+        project = Project.load(args.project)
+    args.spec = args.spec or (project.spec if project and project.spec else None)
+    if args.spec is None:
+        parser.error('give a spec file, or --project with a profile that has "spec"')
+    args.state = args.state or (project.state_dir if project else ROOT / 'state')
+    args.out = args.out or args.state.parent / 'build'
     try:
         spec = builder.load_spec(args.spec.read_text())
         formids = FormIdMap(args.state / 'formids' / (spec['project_id'] + '.json'), spec['plugin'])
@@ -49,14 +63,16 @@ def main():
                 raise SpecError('--adopt', 'FormID map already exists; adoption is only for the first build')
             adopted = builder.adopt_existing(formids, spec, args.adopt.read_bytes())
             print(json.dumps({'adopted': len(adopted)}))
-        index_files = [args.state / 'index' / (m + '.json.gz') for m in spec['masters']]
-        index = MasterIndex([p for p in index_files if p.exists()])
+        index = MasterIndex(index_files(args.state, spec['masters']))
         data, receipt = builder.build(spec, formids, index, base_dir=args.spec.resolve().parent,
-                                      script_cache=load_cache(args.state, spec['project_id']))
+                                      script_cache=load_cache(args.state, spec['project_id']),
+                                      templates=generic.template_dirs(args.state))
     except (SpecError, ValueError) as error:
         print(json.dumps({'ok': False, 'error': str(error)}))
         return 2
-    data_dir = None if args.no_assets else data_dir_for(spec)
+    data_dir = None
+    if not args.no_assets:
+        data_dir = project.game_root / 'Data' if project and (project.game_root / 'Data').is_dir() else data_dir_for(spec)
     assets = AssetIndex(data_dir) if data_dir else None
     receipt['validation'] = validate(data, index, assets, spec['masters'])
     if assets is None:
@@ -74,6 +90,7 @@ def main():
         formids.save()
     summary = {k: receipt[k] for k in ('plugin', 'sha256', 'size', 'recordCounts', 'hedrCount', 'warnings')}
     summary['ok'] = True
+    summary['out'] = None if args.dry_run else str(args.out)
     summary['validation'] = {'checked': receipt['validation']['checked'],
                              'warnings': receipt['validation']['warnings']}
     if args.compare:

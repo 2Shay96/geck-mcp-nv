@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.0: Windows fixes from the Salvatore build (2026-10-05)
+### bridge/
+- **MCP tools work through the Claude desktop device proxy (Cowork).** The proxy drops tool arguments named
+  `session_id` (confirmed: a direct stdio client delivers it, the proxy forwarded `{}`), so every tool that required
+  it failed with `session_id Field required`. The argument is now `editor_session` and optional on every tool; when it
+  is left out the running GECK session is used, and the expected title / plugin hash / model guards still apply.
+  `session_id` stays accepted as an alias.
+- **Hidden GECK windows.** On native Windows GECK can leave Object Window, Cell View and Render Window hidden (after a
+  load, or when GECK starts without user input), which failed load verification with `Cell View selector matched 0
+  windows`. The helper has a new `windows.show` operation (ShowWindow without activation, no clicks; refused while GECK
+  is busy or modal). `geck_plugin_load_status` and `geck_cell_verify` use it, and the new **`geck_show_windows`** tool
+  exposes it. `geck_status` reports `windowsVisible` and `renderWindowReachable`.
+- **`loaded_unverified`.** When the plugin is clearly loaded (title, responsive editor) but the check itself cannot run,
+  the load ends `loaded_unverified` instead of failing and leaving a barrier.
+- **Stale recovery barriers are released.** An uncertain operation from an earlier GECK session (GECK closed, crashed or
+  killed, then restarted) no longer blocks editor work: the next editor call marks it `stale` and reports it under
+  `releasedStaleOperations`. New CLI `recover.py --list / --release-stale / --ack ID --note ... [--offline]`.
+- **Failed loads clean up.** If the Data dialog step fails before OK (e.g. a checkbox that does not toggle because the
+  desktop is locked or the mouse moved), the dialog is cancelled and the load is `failed_before_change` (no barrier).
+- **Reload completion.** Reloading the plugin GECK already shows was reported done before GECK even started reloading
+  (the title names the plugin before and after). A reload is now done only after the reload was seen, or after 45 s.
+- **Templates and indexes follow the profile.** Record templates and master indexes are read from the profile's
+  `state_dir` first, then from `bridge/state` (job 038 failed with `no template dump` although the profile had it).
+  `build_plugin.py` gains `--project`; its default output is `<state>/../build`, the folder the MCP tools use.
+  `cell_verify.py` reads the receipt from that folder too.
+- **`compile_scripts.py`** loads with `live_load.py --if-needed`: no reload when this GECK session already loaded the same
+  plugin bytes; a load whose plugin is active but whose cell check failed still counts.
+- **`geck_render_capture` on Windows** (was macOS only): PrintWindow in GECK's own DPI context (the image is the size GECK
+  renders and reports), retried with a repaint request when it returns only the grey background; then a DPI-aware
+  screen copy if no other window covers the Render Window. A flat (blank/black) result fails with `CAPTURE_BLANK`.
+- `ALCH` (aid items) added to the generic record types.
+- Unit tests pass on Windows (fixtures no longer assume POSIX/CrossOver paths; Wine launcher tests skip on Windows);
+  CI runs them on windows-latest too.
+
 ## 0.1.1: first Windows-tested release (2026-10-03)
 ### bridge/
 - Fixed on native Windows: plugin load failed with `MODAL_BLOCKED` because GECK's Data dialog stayed hidden; the helper

@@ -10,7 +10,7 @@ import unittest
 from geck_mcp.config import Project
 from geck_mcp.esp import build as builder, codec
 from geck_mcp.service import Service
-from tests.test_service import FakeTransport
+from tests.test_service import FakeTransport, host_launcher
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).parent / 'fixtures'
@@ -35,7 +35,7 @@ class AuthoringServiceTests(unittest.TestCase):
                 'FacRmFloor02': ['STAT', '00018EE2', None, 'Dungeons\\Facility\\Room\\FacRmFloor02.nif']}}, s)
         self.spec_path = root / 'coolworld.spec.json'
         self.spec_path.write_text(json.dumps(SPEC))
-        self.p = Project(project_id='coolworld', wine=root / 'wine', bottle=root / 'bottle',
+        self.p = Project(project_id='coolworld', **host_launcher(root),
                          game_root=root / 'game', plugin='CoolWorld.esp', state_dir=root / 'state',
                          helper=root / 'helper', spec=self.spec_path,
                          records=[dict(editor_id='CoolWorldSalvatore', form_id='01000800')])
@@ -122,6 +122,16 @@ class AuthoringServiceTests(unittest.TestCase):
         result = self.service.plugin_install('100:123', 'i1')
         self.assertFalse(result['ok'])
         self.assertEqual(result['error']['code'], 'UNSAVED_CHANGES')
+
+    def test_install_without_editor_session(self):
+        # Through the Claude desktop device proxy the session argument may be missing (fix 3).
+        self.service.plugin_build('b1')
+        installed = self.service.plugin_install(None, 'i1')
+        self.assertTrue(installed['ok'], installed)
+        self.assertEqual(installed['data']['editorTitle'], 'Garden of Eden Creation Kit - [CoolWorld.esp]')
+        self.transport.dirty = True           # the dirty-editor guard still applies without a session
+        refused = self.service.plugin_install(None, 'i2')
+        self.assertEqual(refused['error']['code'], 'UNSAVED_CHANGES')
 
     def test_lookup_finds_project_and_master_records(self):
         result = self.service.master_lookup('Floor', 'STAT')['data']

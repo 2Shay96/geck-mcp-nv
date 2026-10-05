@@ -3,7 +3,9 @@
     python compile_scripts.py --project projects/my_mod.json
 
 1. Build the plugin (scripts without a cache hit are emitted uncompiled) and install it.
-2. Load it in GECK (live_load.py), then for each uncompiled script (quest scripts first):
+2. Load it in GECK (live_load.py --if-needed: skipped when this GECK session already loaded these exact
+   bytes; a load whose plugin is active but whose cell check cannot run still counts, since the script
+   editor does not need Cell View), then for each uncompiled script (quest scripts first):
    Script Edit > Open > select > Save, through the bridge (Probe "script.compile"). Compile errors
    are GECK's own messages; the run stops at the first failing script.
 3. Save the plugin from GECK, lift the compiled subrecords into state/scripts/<project>.json
@@ -47,6 +49,38 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def json_lines(text):
+    out = []
+    for line in (text or '').splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            out.append(value)
+    return out
+
+
+def load_in_geck(project, project_path):
+    """Run live_load.py --if-needed. Returns (ok, summary)."""
+    load = subprocess.run([sys.executable, str(ROOT / 'live_load.py'), '--project', str(project_path),
+                           '--timeout', '1200', '--if-needed'], capture_output=True, text=True, timeout=1300)
+    lines = json_lines(load.stdout)
+    summary = lines[-1] if lines else {'stderr': load.stderr[-500:]}
+    if load.returncode == 0:
+        return True, summary
+    # Dispatched in this run and GECK now shows the plugin, clean: the load itself worked; only its check failed.
+    dispatched = any((l.get('load') or {}).get('ok') and (l.get('load') or {}).get('outcome') == 'loading'
+                     for l in lines)
+    status = probe('status')
+    after = status.get('after') or {}
+    title = 'Garden of Eden Creation Kit - [%s]' % project.plugin
+    if dispatched and status.get('ok') and after.get('editorTitle') == title and not after.get('unsavedChanges'):
+        return True, dict(summary, warning='load check failed, but GECK shows %s and is clean; continuing '
+                                           '(the script editor does not need Cell View)' % project.plugin)
+    return False, summary
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', type=Path, required=True)
@@ -71,13 +105,13 @@ def main():
     if not args.skip_load:
         entry = auth.install(editor_title(project))
         print(json.dumps({'stage': 'install', 'sha256': entry.get('sha256'), 'changed': entry.get('changed')}), flush=True)
-        load = subprocess.run([sys.executable, str(ROOT / 'live_load.py'), '--project', str(args.project),
-                               '--timeout', '1200'], capture_output=True, text=True, timeout=1300)
-        print(load.stdout.strip().splitlines()[-1] if load.stdout.strip() else load.stderr[-500:], flush=True)
-        if load.returncode != 0:
+        ok, summary = load_in_geck(project, args.project)
+        print(json.dumps(dict(summary, stage='load')), flush=True)
+        if not ok:
             print(json.dumps({'ok': False, 'stage': 'load'}))
             return 3
-        time.sleep(8)
+        if summary.get('outcome') != 'already_loaded':
+            time.sleep(8)
     kinds = {e: spec['records'][e].get('script_type', 'object') for e in pending}
     order = sorted(pending, key=lambda e: (kinds[e] != 'quest', e))
     for edid in order:

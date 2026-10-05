@@ -1,9 +1,13 @@
 """Spec-driven plugin authoring for a configured project (Milestone 2).
 
-Shared by the CLIs (build_plugin.py, install_plugin.py) and the MCP tools. Paths:
-  <bridge>/build/<Plugin>.esp and <Plugin>.receipt.json     build outputs
+Shared by the CLIs (build_plugin.py, install_plugin.py, compile_scripts.py, cell_verify.py) and the
+MCP tools. Paths:
+  <state_dir>/../build/<Plugin>.esp and <Plugin>.receipt.json   build outputs (default_build_dir())
   <state_dir>/formids/<project_id>.json                     stable FormID map
-  <state_dir>/index/<master>.json.gz                        master indexes (esm_index.py)
+  <state_dir>/index/<master>.json.gz                        master indexes (esm_index.py); falls back to
+                                                            this repo's state/index
+  <state_dir>/templates/<master>/<EditorID>.json            record templates (esm_research.py dump);
+                                                            falls back to this repo's state/templates
   <state_dir>/installs/<project_id>.json                    install history
   <state_dir>/backups/<Plugin>.<sha256>.bak                 anything an install replaced
 """
@@ -14,15 +18,35 @@ from pathlib import Path
 import tempfile
 import time
 
-from .esp import build as builder, codec, diff, scripts
+from .esp import build as builder, codec, diff, generic, scripts
 from .esp.assets import AssetIndex
 from .esp.formids import FormIdMap, MasterIndex
 from .esp.records import SpecError
 from .esp.validate import validate
 
 
+CODE_STATE = Path(__file__).resolve().parent.parent / 'state'
+
+
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def default_build_dir(state_dir):
+    """The build folder shared by the MCP tools and the CLIs: next to the project's state folder."""
+    return Path(state_dir).parent / 'build'
+
+
+def index_files(state_dir, masters):
+    """Master index per master: <state_dir>/index first, then this repo's state/index."""
+    files = []
+    for m in masters:
+        for folder in (Path(state_dir) / 'index', CODE_STATE / 'index'):
+            path = folder / (m + '.json.gz')
+            if path.exists():
+                files.append(path)
+                break
+    return files
 
 
 class AuthoringError(ValueError):
@@ -37,7 +61,7 @@ class Authoring:
         self.spec_path = Path(spec_path) if spec_path else getattr(project, 'spec', None)
         if not self.spec_path:
             raise AuthoringError('NO_SPEC', 'Project %s has no "spec" configured' % project.project_id)
-        self.build_dir = Path(build_dir) if build_dir else project.state_dir.parent / 'build'
+        self.build_dir = Path(build_dir) if build_dir else default_build_dir(project.state_dir)
         self.data_dir = project.game_root / 'Data'
 
     # -- inputs -----------------------------------------------------------------------
@@ -49,9 +73,11 @@ class Authoring:
         return spec
 
     def index(self, masters):
-        folder = self.project.state_dir / 'index'
-        files = [folder / (m + '.json.gz') for m in masters]
-        return MasterIndex([f for f in files if f.exists()])
+        return MasterIndex(index_files(self.project.state_dir, masters))
+
+    @property
+    def templates(self):
+        return generic.template_dirs(self.project.state_dir)
 
     def formids(self, spec):
         return FormIdMap(self.project.state_dir / 'formids' / (spec['project_id'] + '.json'), spec['plugin'])
@@ -80,7 +106,8 @@ class Authoring:
             builder.adopt_existing(formids, spec, Path(adopt).read_bytes())
         index = self.index(spec['masters'])
         data, receipt = builder.build(spec, formids, index, base_dir=self.spec_path.parent,
-                                      script_cache=scripts.load_cache(self.project.state_dir, spec['project_id']))
+                                      script_cache=scripts.load_cache(self.project.state_dir, spec['project_id']),
+                                      templates=self.templates)
         assets = AssetIndex(self.data_dir) if check_assets and self.data_dir.is_dir() else None
         receipt['validation'] = validate(data, index, assets, spec['masters'])
         missing = [m for m in spec['masters'] if m not in index.masters]

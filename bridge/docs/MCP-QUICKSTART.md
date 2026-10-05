@@ -35,7 +35,11 @@ A generic stdio client configuration uses:
 }
 ```
 
-On Windows use `.venv\Scripts\python.exe` and Windows paths. After changing the arguments, restart the MCP connection; a running server keeps the profile it loaded at startup.
+On Windows use `.venv\Scripts\python.exe` and Windows paths. After changing the arguments **or the bridge code**, restart the MCP client (quit and reopen Claude desktop or Codex): a running server keeps the code and profile it loaded at startup.
+
+### Session argument (0.2.0)
+
+Tools that act on the running GECK take an optional `editor_session` (the `sessionId` from `geck_status`). Leave it out and the bridge uses the GECK that is running now; the expected title, plugin hash and model arguments still guard every edit. `session_id` is still accepted as an old alias, but the Claude desktop device proxy (Cowork) drops arguments named `session_id`, so use `editor_session` or nothing there.
 
 ## Project configuration
 
@@ -47,8 +51,8 @@ Dependencies are pinned in `requirements.lock.txt`; the current environment uses
 
 ## Normal workflow
 
-1. Obtain `geck_status` and a disk `geck_record_read`. Call `geck_plugin_load` with the session, exact editor title, disk plugin hash, and fresh request key. The editor must be clean. Poll `geck_plugin_load_status` using the returned operation ID until `loaded_verified`; `loading` means only dispatch succeeded. Use `reload: true` only when intentionally reloading an already active plugin.
-2. Call `geck_status`, then `geck_project_attach` with the returned `sessionId`.
+1. Obtain `geck_status` and a disk `geck_record_read`. Call `geck_plugin_load` with the exact editor title, disk plugin hash, and fresh request key (session optional). The editor must be clean. Poll `geck_plugin_load_status` using the returned operation ID until `loaded_verified` or `loaded_unverified`; `loading` means only dispatch succeeded. `loaded_unverified` means GECK shows the plugin but the cell check could not run (for example a hidden Cell View): call `geck_show_windows`, then `geck_cell_verify`. Use `reload: true` only when intentionally reloading an already active plugin; a reload is only reported done after GECK was seen reloading (or 45 s passed), because the title names the plugin before and after.
+2. Call `geck_status`, then `geck_project_attach` (optionally with the returned `sessionId`).
 3. Call `geck_record_read` with `source: disk` for the persisted record and plugin hash, then `source: editor` with the session for the current model field.
 4. Call `geck_record_set_model` with the expected old model, expected plugin hash, session and a fresh request key. A successful edit is committed in GECK memory, not yet saved.
 5. Open/close the identified preview. Preview existence is not visual verification.
@@ -59,9 +63,21 @@ Repeated identical mutation requests using the same request key return the origi
 
 ## Diagnostics and recovery
 
-Use `geck_inspect_windows` for a bounded read-only inventory, including modal text. It is available while the recovery barrier is active. Use `geck_operation_get` or `geck://operations/{operation_id}` for persisted step results and failures.
+Use `geck_inspect_windows` for a bounded read-only inventory, including modal text. It is available while the recovery barrier is active. Use `geck_operation_get` or `geck://operations/{operation_id}` for persisted step results and failures (`journalState`, `recoveryAck`).
 
-An unknown operation outcome blocks further editor work. Inspect the editor, disk and operation evidence, resolve any dialogs deliberately, then call `geck_recovery_acknowledge` with the current session/hash and an explanatory review note. Acknowledgment does not roll back or certify the original operation.
+`geck_status` reports `windowsVisible` (Object Window, Cell View, Render Window) and `renderWindowReachable`. On native Windows GECK sometimes leaves these three windows hidden (after a load, or when it was started without user input). `geck_plugin_load_status` and `geck_cell_verify` show them again automatically; `geck_show_windows` does it on request (ShowWindow without activation, no clicks; refused while GECK is busy or a modal dialog is open).
+
+An unknown operation outcome blocks further editor work. Inspect the editor, disk and operation evidence, resolve any dialogs deliberately, then call `geck_recovery_acknowledge` with the current plugin hash and an explanatory review note. Acknowledgment does not roll back or certify the original operation.
+
+A barrier whose GECK session is gone (GECK was closed, crashed or killed and started again) is released automatically by the next editor call: its journal state becomes `stale` and the result lists it under `releasedStaleOperations`. From a shell:
+
+```sh
+python recover.py --project projects/my_mod.json --list            # unresolved operations, their session, the current session
+python recover.py --project projects/my_mod.json --release-stale   # release barriers from earlier GECK sessions now
+python recover.py --project projects/my_mod.json --ack <id> --note "what you checked"   # add --offline if GECK is not running
+```
+
+A load whose Data dialog step fails before OK (for example a checkbox that does not toggle because the desktop is locked or the mouse moved) cancels the dialog and reports `failed_before_change`, so it leaves no barrier.
 
 The lock coordinates cooperating bridge callers; it cannot prevent manual edits. Existing record dialogs block automated workflows. The bridge checks session, plugin, configured record identity and expected values, but live identity is currently established by the disk FormID plus the exact EditorID in a scoped Static dialog. Full live provenance/load-order verification remains future work.
 
@@ -81,4 +97,6 @@ The MCP helper reads GECK's actual list image indices for selected files and ver
 Pending loads block other editor workflows while status and inspection remain available. After an interrupted load, inspect current editor and disk state before recovery acknowledgment. A load can be acknowledged in a clean empty restarted editor; subsequent polling of an acknowledged load is rejected. Acknowledgment never certifies success.
 
 GECK can take several minutes to load the master in this bottle. Transient control timeouts during loading are not evidence of a missing plugin or a corrupt mesh. Recheck status after loading; do not repeat mutations on timeout.
+
+On native Windows the Data list checkboxes are toggled with posted clicks at the parked real cursor, so keep the desktop unlocked and do not move the mouse while a load is being dispatched (a few seconds).
 

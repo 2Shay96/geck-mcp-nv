@@ -8,8 +8,8 @@ jobs:
   bridge:
     strategy:
       matrix:
-        # windows-latest added once the bridge tests are made path-agnostic (they assume POSIX paths today)
-        os: [ubuntu-latest, macos-latest]
+        # Windows runs the native launcher path; the Wine/CrossOver launcher tests skip there.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:

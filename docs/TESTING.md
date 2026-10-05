@@ -2,6 +2,36 @@
 
 What has been run, where, and what happened. Newest first.
 
+## 2026-10-05: 0.2.0 fixes, Windows 11, native launcher
+
+Same Shadow cloud PC as 3 Oct (display scaled 200%). Branch `bridge-fixes`. Runner jobs `.claude-runner\done\046`-`056`.
+Live tests used only throwaway plugins: `HelloWasteland.esp` (profile `projects/hellowasteland.json`) and a local
+acceptance plugin `HelloPreview.esp` (one STAT for the preview tools, one 5-line object script for
+`compile_scripts.py`; files in `bridge/state/acceptance/`, not shipped). Driver: `bridge/state/acceptance/acceptance.py`.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Fix 3 cause | confirmed | Direct stdio client (job 047): `session_id` reaches the server. Through the Claude desktop device proxy the server received `{}` |
+| `bridge` unit tests, Windows | pass | Job 054: 161 run, 9 skipped (6 as before, 2 Wine launcher tests, 1 symlink without privilege). Linux: 161 pass, 6 skipped |
+| Salvatore regression | pass | Spec at workshop HEAD: sha256 `382f249d…` (byte-identical). Current workshop spec (author field edited, uncommitted): `a5d045c3…` with the old and the new code |
+| `build_plugin.py <spec> --dry-run --state <workshop state>` | pass | Job 038 failed here with `no template dump` |
+| Helper rebuild (`build_helper.py`) | pass | Old exe kept in `bridge/state/helper-old/` |
+| Acceptance round 1 (job 052) | pass, except capture | status → load (`loaded_verified`, 44 s) → cell verify 14/14 with frame → reload (68 s) → cell verify 14/14 → `compile_scripts.py` without `--skip-load` (load, compile, save, cache, rebuild, install; exit 0) → preview open/close → kill GECK mid-load, restart |
+| Acceptance round 2 (job 053, after the GECK restart) | pass, except one capture | The first load released the killed load's barrier (`releasedStaleOperations`), then the same steps passed again |
+| MCP through the Claude desktop device proxy (server `geck-hello`, HelloWasteland profile) | pass | `geck_status` (3 windows visible, Render Window reachable); `geck_plugin_load` without a session (released the barrier left by the kill test) → `loaded_verified`; reload → `loaded_verified` only after the reload was seen; `geck_cell_verify` with `editor_session` and with none, framing `light.red` / `barrel.left`; `geck_plugin_install`, `geck_plugin_save`, `geck_recovery_acknowledge` with `editor_session` reached the server (install unchanged; save and acknowledge refused by their own guards, as expected for this profile). Proxy check: `editor_session: "999:1"` → `STALE_SESSION` (argument arrives); `session_id: "999:1"` → accepted as if absent (the proxy drops it) |
+| Render capture | pass | Jobs 054-056 and MCP: PNGs of the framed cell (floor tiles, barrel, light markers), 455x169 (PrintWindow, = the client size GECK reports) or 910x338 (screen copy at 200% scaling); 4 of 4 non-blank in job 056. Found on the way: a DPI-unaware screen copy took the wrong area (job 052); a covered Render Window gave a picture of the covering window (overlap check added); PrintWindow alternates between the rendered view and the plain grey background (retry with a repaint request added) |
+
+Not run: Linux/Proton; macOS + CrossOver with this version; `windows/` server; GECK Extender. The new windows-latest
+CI job has not run yet (it runs on the first push).
+
+### Found and fixed during these runs
+- GECK started by a script had Object Window, Cell View and Render Window all hidden before any load (job 051). A
+  posted `WM_NULL` did not bring them back; `ShowWindow` did. Started by hand, they were visible. This matches jobs
+  031/041 (hidden after a load).
+- A Data list checkbox did not toggle while nobody was at the PC (job 049); the load then left the Data dialog open and a
+  barrier. Now the dialog is cancelled and the load fails cleanly (`failed_before_change`).
+- Reloading the already-shown plugin was reported `loaded_verified` before GECK started reloading (job 051).
+
 ## 2026-10-03: Windows 11, native launcher (first real Windows run)
 
 Machine: Shadow cloud PC, Windows 11 Home 10.0.22621, NVIDIA RTX 2000 Ada. Fallout: New Vegas + vanilla GECK from Steam

@@ -116,11 +116,12 @@ def interior_block(local_id):
     return local_id % 10, (local_id // 10) % 10
 
 
-def build(spec, formids, index=None, base_dir=None, script_cache=None):
+def build(spec, formids, index=None, base_dir=None, script_cache=None, templates=None):
     """Return (plugin_bytes, receipt). `formids` is a FormIdMap (updated in place, not saved).
 
     base_dir: folder that script "source" paths are relative to (the spec's folder).
     script_cache: {EditorID: compiled entry} from scripts.load_cache(); uncompiled otherwise.
+    templates: template folders in lookup order (generic.template_dirs); default: the code root's.
     """
     spec = check_spec(spec)
     index = index or MasterIndex()
@@ -152,7 +153,7 @@ def build(spec, formids, index=None, base_dir=None, script_cache=None):
         elif rtype in records.BUILDERS and 'template' not in rec_spec and 'fields' not in rec_spec:
             rec = records.BUILDERS[rtype](full[edid], edid, rec_spec)
         else:
-            rec = generic.build_generic(full[edid], edid, rec_spec, resolver, masters=masters)
+            rec = generic.build_generic(full[edid], edid, rec_spec, resolver, masters=masters, templates=templates)
         by_type.setdefault(rtype, []).append(rec)
 
     # Interior cells: CELL -> block -> sub-block -> [CELL, children(6) -> temporary(9) -> REFR*]

@@ -12,6 +12,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+from geck_mcp.authoring import Authoring, AuthoringError  # noqa: E402
 from geck_mcp.config import Project  # noqa: E402
 from geck_mcp.service import Service  # noqa: E402
 
@@ -23,7 +24,11 @@ def main():
     parser.add_argument('--frame', metavar='REF_ID')
     args = parser.parse_args()
     project = Project.load(args.project)
-    receipt = json.loads((ROOT / 'build' / (Path(project.plugin).stem + '.receipt.json')).read_text())
+    try:
+        receipt = Authoring(project).receipt()      # <state_dir>/../build, the same folder the MCP tools use
+    except AuthoringError as error:
+        print(json.dumps({'ok': False, 'error': str(error)}))
+        return 2
     frame = None
     if args.frame:
         refs = [r for r in receipt['references'].get(args.cell, []) if r['refId'] == args.frame]

@@ -14,6 +14,7 @@ import uuid
 from bridge_lock import bottle_lock
 from esp_check import file_snapshot, read_model, subrecords, cstring
 import struct
+from . import __version__
 from .config import model_asset
 from .transport import BridgeError, Transport
 from .worker import AutoTransport, PersistentTransport
@@ -23,13 +24,18 @@ from .esp.records import SpecError
 
 
 CAPABILITIES = {
-    'version': '0.1.0', 'game': 'Fallout New Vegas', 'recordTypes': ['STAT'],
+    'version': __version__, 'game': 'Fallout New Vegas', 'recordTypes': ['STAT'],
     'transport': 'stdio', 'editorAdapter': '32-bit Win32 controls under CrossOver',
     'helperTransport': 'persistent worker (Probe.Mcp.exe serve) with automatic one-shot fallback',
     'recordIdentity': 'configured plugin + persisted STAT FormID + exact EditorID',
+    'editorSession': 'optional editor_session argument (alias session_id); omitted = the running GECK session, '
+                     'still guarded by expected titles and plugin hashes',
+    'recovery': 'an uncertain operation blocks editor work until acknowledged; it is released automatically '
+                '(state "stale") once GECK runs with a different session (restart). CLI: recover.py',
     'tools': {
         'geck_status': {'effect': 'observe'},
         'geck_inspect_windows': {'effect': 'observe', 'scope': 'bounded GECK control inventory'},
+        'geck_show_windows': {'effect': 'show hidden Object Window, Cell View and Render Window (no clicks)'},
         'geck_project_attach': {'effect': 'observe'},
         'geck_plugin_load': {'effect': 'load configured plugin and FalloutNV.esm; requires clean editor'},
         'geck_plugin_load_status': {'effect': 'observe and reconcile pending load'},
@@ -51,7 +57,8 @@ CAPABILITIES = {
         'geck_actor_photo': {'effect': 'build/install/load the throwaway GeckPhotoStudio.esp, frame an NPC_/CREA, '
                              'capture PNG + transparent cut-out; resumable (stage loading -> done)',
                              'never': 'saves or edits the user plugins; discards unsaved edits'},
-        'geck_render_capture': {'effect': 'macOS capture of the current Render Window by CGWindowID; no clicks'},
+        'geck_render_capture': {'effect': 'capture of the current Render Window (macOS: CGWindowID; '
+                                'Windows: PrintWindow); no clicks; refuses a blank or black image'},
         'geck_image_cutout': {'effect': 'write a transparent PNG of the subject in an existing capture'},
     },
     'authoring': {'recordTypes': ['TES4', 'STAT', 'MSTT', 'LIGH', 'CELL (interior)', 'REFR', 'ACHR', 'ACRE'],
@@ -64,6 +71,17 @@ CAPABILITIES = {
                            'no extended XXXX in STAT', 'no visual correctness claim',
                            'active file identified by editor title; master list not verified'],
 }
+
+
+# Editor work these tools may do while an uncertain operation blocks the editor.
+BARRIER_EXEMPT = ('geck_status', 'geck_inspect_windows', 'geck_plugin_load_status', 'geck_recovery_acknowledge',
+                  'geck_show_windows')
+UNRESOLVED = ('running', 'outcome_unknown', 'loading')
+# Helper errors meaning "this UI check could not run" (hidden or missing window, selector miss), as opposed to a
+# verified mismatch. A load whose plugin is clearly active but hits one of these reports loaded_unverified.
+UNVERIFIABLE = ('EDITOR_ERROR', 'HELPER_PROTOCOL_ERROR')
+# A reload whose progress was never observed is trusted only after this long (a FalloutNV.esm load takes 15+ s).
+RELOAD_SETTLE_SECONDS = 45
 
 
 def make_transport(project):
@@ -114,8 +132,73 @@ class Service:
         with closing(self.db()) as db:
             rows = db.execute('SELECT * FROM steps WHERE operation_id=? ORDER BY sequence',
                               (operation_id,)).fetchall()
-        return dict(result, steps=[dict(row, evidence=json.loads(row['evidence'])
-                                      if row['evidence'] else None) for row in rows])
+            journal = db.execute('SELECT state, recovery_ack FROM operations WHERE id=?', (operation_id,)).fetchone()
+        ack = json.loads(journal['recovery_ack']) if journal and journal['recovery_ack'] else None
+        return dict(result, journalState=journal['state'] if journal else None, recoveryAck=ack,
+                    steps=[dict(row, evidence=json.loads(row['evidence'])
+                                if row['evidence'] else None) for row in rows])
+
+    # -- recovery barrier ----------------------------------------------------------------
+    def unresolved(self):
+        """Uncertain operations that block editor work on this GECK install (oldest first)."""
+        with closing(self.db()) as db:
+            return db.execute('SELECT * FROM operations WHERE bottle=? AND state IN (%s) AND recovery_ack IS NULL '
+                              'ORDER BY started' % ','.join('?' * len(UNRESOLVED)),
+                              (str(self.project.lock_root), *UNRESOLVED)).fetchall()
+
+    def operation_session(self, row):
+        """The GECK session an operation ran against: its result, else its journaled steps. None if unknown."""
+        try:
+            data = (json.loads(row['result']) if row['result'] else {}).get('data')
+        except (ValueError, AttributeError):
+            data = None
+        if isinstance(data, dict) and data.get('sessionId'):
+            return data['sessionId']
+        with closing(self.db()) as db:
+            steps = db.execute('SELECT evidence FROM steps WHERE operation_id=? ORDER BY sequence',
+                               (row['id'],)).fetchall()
+        for step in steps:
+            try:
+                evidence = json.loads(step['evidence']) if step['evidence'] else None
+            except ValueError:
+                continue
+            if isinstance(evidence, dict):
+                for key in ('session', 'sessionId'):
+                    if isinstance(evidence.get(key), str) and evidence[key]:
+                        return evidence[key]
+        return None
+
+    def current_session(self):
+        """Session ID of the running GECK, or None when it cannot be read (not running, busy)."""
+        try:
+            return self.transport.call('status')['sessionId']
+        except Exception:
+            return None
+
+    def mark_stale(self, row, own, current):
+        ack = {'auto': 'stale', 'operationSession': own, 'currentSession': current, 'time': time.time(),
+               'note': 'GECK was restarted (session %s, now %s); the editor state this operation left behind '
+                       'is gone. Released automatically; disk changes, if any, were not reviewed.' % (own, current)}
+        with closing(self.db()) as db, db:
+            db.execute("UPDATE operations SET state='stale', recovery_ack=? WHERE id=? AND recovery_ack IS NULL",
+                       (json.dumps(ack), row['id']))
+        return {'operationId': row['id'], 'operation': row['name'], 'previousState': row['state'],
+                'operationSession': own, 'currentSession': current}
+
+    def release_stale(self, rows=None):
+        """Release barriers whose GECK session is gone. Returns (released, still_blocking)."""
+        rows = self.unresolved() if rows is None else rows
+        if not rows:
+            return [], []
+        current = self.current_session()
+        released, blocking = [], []
+        for row in rows:
+            own = self.operation_session(row)
+            if current and own and own != current:
+                released.append(self.mark_stale(row, own, current))
+            else:
+                blocking.append(row)
+        return released, blocking
 
     def run(self, name, args, action, request_key=None, modifies=False, editor=True):
         started = time.monotonic()
@@ -134,12 +217,20 @@ class Service:
                             if row['fingerprint'] != fingerprint:
                                 raise BridgeError('IDEMPOTENCY_CONFLICT', 'Key already used for different arguments')
                             return dict(self.operation(row['id']), replayed=True)
-                    if editor and name not in ('geck_status', 'geck_inspect_windows', 'geck_plugin_load_status', 'geck_recovery_acknowledge'):
-                        row = db.execute("SELECT id FROM operations WHERE bottle=? AND state IN ('running','outcome_unknown','loading') AND recovery_ack IS NULL LIMIT 1",
-                                         (str(self.project.lock_root),)).fetchone()
-                        if row:
-                            raise BridgeError('RECOVERY_REQUIRED', 'Uncertain prior operation blocks editor work',
-                                              {'operationId': row['id']})
+                    released = []
+                    if editor and name not in BARRIER_EXEMPT:
+                        blocked = self.unresolved()
+                        if blocked:
+                            released, blocking = self.release_stale(blocked)
+                            if blocking:
+                                raise BridgeError('RECOVERY_REQUIRED', 'Uncertain prior operation blocks editor work',
+                                                  {'operationId': blocking[0]['id'],
+                                                   'unresolved': [dict(operationId=r['id'], operation=r['name'],
+                                                                       state=r['state']) for r in blocking],
+                                                   'released': released,
+                                                   'next': 'Inspect geck_operation_get, then geck_recovery_acknowledge '
+                                                           '(or recover.py --list / --ack). Restarting GECK '
+                                                           'releases it automatically.'})
                     db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
                                (operation_id, self.project.project_id, str(self.project.lock_root), name,
                                 request_key, fingerprint, 'running', None, time.time(), None))
@@ -151,6 +242,8 @@ class Service:
                 try:
                     data = action()
                     outcome = data.pop('_outcome', 'unchanged')
+                    if released:
+                        data['releasedStaleOperations'] = released
                     result = {'ok': True, 'operationId': operation_id, 'operation': name,
                               'projectId': self.project.project_id, 'outcome': outcome,
                               'data': data, 'error': None}
@@ -258,15 +351,24 @@ class Service:
     def status(self):
         def action():
             state = self.call('status')
-            return dict(state, bridgeTransport=self.transport_info())
+            out = dict(state, bridgeTransport=self.transport_info())
+            panes = state.get('editorWindows')
+            if isinstance(panes, dict):   # helper 0.1.2+: Object Window, Cell View, Render Window
+                out['windowsVisible'] = {name: bool(pane.get('visible')) for name, pane in panes.items()}
+                out['renderWindowReachable'] = bool((panes.get('renderWindow') or {}).get('reachable'))
+                if not all(out['windowsVisible'].values()):
+                    out['hint'] = 'Some GECK windows are hidden: geck_show_windows shows them again.'
+            return out
         return self.run('geck_status', {}, action)
 
     def inspect_windows(self, limit):
         return self.run('geck_inspect_windows', {'limit': limit}, lambda: self.call('inspect', limit))
 
-    def check_session(self, session, require_plugin=True, no_dialogs=True):
+    def check_session(self, session=None, require_plugin=True, no_dialogs=True):
+        """Identify the running GECK. With session None (the MCP argument was omitted) the current session is
+        adopted; every later helper call of the operation is then guarded by it (state['sessionId'])."""
         state = self.call('status', session=session)
-        if state['sessionId'] != session:
+        if session and state['sessionId'] != session:
             raise BridgeError('STALE_SESSION', 'Editor restarted; attach again')
         # Wine may report C: rather than Z:. Compare through the configured bottle.
         actual = state['executable']
@@ -303,7 +405,7 @@ class Service:
             raise BridgeError('IDENTITY_MISMATCH', 'Persisted FormID differs from configured record', record)
         return snapshot, record
 
-    def attach(self, session):
+    def attach(self, session=None):
         def action():
             state = self.check_session(session)
             records = [self.persisted(r.editor_id)[1] for r in self.project.records]
@@ -313,6 +415,7 @@ class Service:
     def load_plugin(self, session, expected_title, expected_hash, request_key, reload=False):
         def action():
             state = self.check_session(session, require_plugin=False)
+            sid = state['sessionId']
             if state['editorTitle'] != expected_title:
                 raise BridgeError('STALE_STATE', 'Editor title changed before plugin load', state)
             if state['unsavedChanges']:
@@ -331,58 +434,143 @@ class Service:
             for record in self.project.records:
                 self.persisted(record.editor_id)
             if expected_title == f'Garden of Eden Creation Kit - [{self.project.plugin}]' and not reload:
-                return {'alreadyLoaded': True, 'sessionId': session, 'file': snapshot}
-            self.call('data.open.inspect', session=session)
-            selection = self.call('data.load', self.project.plugin, session=session)
-            return {'_outcome': 'loading', 'sessionId': session, 'file': snapshot,
+                return {'alreadyLoaded': True, 'sessionId': sid, 'file': snapshot}
+            self.call('data.open.inspect', session=sid)
+            try:
+                selection = self.call('data.load', self.project.plugin, session=sid)
+            except BridgeError as error:
+                self.cancel_failed_load(error, sid)
+                raise
+            # Reloading the plugin GECK already shows: the title names it before and after the load, so
+            # load_status must first see the load happen (or RELOAD_SETTLE_SECONDS pass) before trusting it.
+            same_title = expected_title.rstrip('*') == f'Garden of Eden Creation Kit - [{self.project.plugin}]'
+            return {'_outcome': 'loading', 'sessionId': sid, 'file': snapshot, 'reload': same_title,
+                    'dispatchedAt': time.time(), 'loadingObserved': False,
                     'dispatch': selection, 'loaded': False,
                     'next': 'Call geck_plugin_load_status with this operationId; do not redispatch.'}
         return self.run('geck_plugin_load', dict(session=session, expected_title=expected_title,
                         expected_hash=expected_hash, reload=reload), action, request_key, modifies=True)
 
+    def cancel_failed_load(self, error, session):
+        """data.load fails before it presses OK (its last step), unless it timed out. Cancel the Data dialog then:
+        nothing was loaded, so the failure is failed_before_change instead of a recovery barrier."""
+        if error.code != 'EDITOR_ERROR' or error.uncertain:
+            return
+        try:
+            self.call('data.cancel', session=session)
+        except BridgeError as cancel_error:
+            error.evidence = {'load': error.evidence, 'cancel': str(cancel_error)}
+            return                      # dialog state unknown: keep the barrier
+        self._mutation_dispatched = False
+        hint = (' (GECK hit-tests the real mouse cursor in the Data list: keep the desktop unlocked and the '
+                'mouse still while loading)' if 'toggle' in str(error) or 'cursor' in str(error) else '')
+        error.args = (str(error) + '; Data dialog cancelled, nothing loaded' + hint,)
+
     def load_status(self, operation_id):
         def action():
             previous = self.operation(operation_id)
             with closing(self.db()) as db:
-                reviewed = db.execute('SELECT recovery_ack FROM operations WHERE id=?', (operation_id,)).fetchone()
-            if reviewed and reviewed['recovery_ack']:
+                journal = db.execute('SELECT * FROM operations WHERE id=?', (operation_id,)).fetchone()
+            if journal and journal['recovery_ack']:
                 raise BridgeError('RECOVERY_ACKNOWLEDGED', 'This load was reviewed and released; start a fresh load instead')
             if previous['operation'] != 'geck_plugin_load':
                 raise ValueError('Not a plugin-load operation')
             if previous['outcome'] != 'loading':
                 return {'load': previous}
             session = previous['data']['sessionId']
+
+            def still_loading(observation, observed=True):
+                if observed and not previous['data'].get('loadingObserved'):
+                    previous['data']['loadingObserved'] = True
+                    with closing(self.db()) as db, db:
+                        db.execute('UPDATE operations SET result=? WHERE id=? AND state=?',
+                                   (json.dumps(previous), operation_id, 'loading'))
+                return {'load': previous, 'loading': True, 'lastObservation': observation}
             try:
                 state = self.check_session(session)
             except BridgeError as error:
                 if error.code in ('EDITOR_UNRESPONSIVE', 'WRONG_PLUGIN'):
-                    return {'load': previous, 'loading': True, 'lastObservation': str(error)}
+                    return still_loading(str(error))
+                if error.code == 'STALE_SESSION' and journal is not None:
+                    # GECK restarted mid-load: nothing of that load survives, so the barrier goes too.
+                    current = self.current_session()
+                    if current and current != session:
+                        error.evidence = {'released': self.mark_stale(journal, session, current),
+                                          'next': 'Start a fresh geck_plugin_load'}
                 raise
             snapshot, _ = file_snapshot(self.project.plugin_path)
             if snapshot['sha256'] != previous['data']['file']['sha256']:
                 raise BridgeError('STALE_STATE', 'Plugin bytes changed during load', snapshot)
             if state['unsavedChanges']:
                 raise BridgeError('UNSAVED_CHANGES', 'Editor changed while loading; inspect before proceeding', state)
+            data = previous['data']
+            if (data.get('reload') and not data.get('loadingObserved')
+                    and time.time() - data.get('dispatchedAt', 0) < RELOAD_SETTLE_SECONDS):
+                return still_loading('reload dispatched; waiting to see GECK reload (the title already named the '
+                                     'plugin before)', observed=False)
+            # The title names the plugin and GECK answers: the load is done. GECK sometimes keeps its Object
+            # Window, Cell View and Render Window hidden after a load (native Windows); show them again.
+            windows = self.restore_windows(session)
             # A responsive identified editor and exact configured record readbacks
             # provide stronger completion evidence than the title alone.
-            records = []
-            for record in self.project.records:
-                self.select(record.editor_id, session)
-                current = self.call('object.read', record.editor_id, session=session)
-                self.call('object.cancel', record.editor_id, session=session)
-                persisted = self.persisted(record.editor_id)[1]
-                if current['modelPath'] != persisted['modelPath']:
-                    raise BridgeError('STALE_STATE', 'Loaded model differs from persisted plugin',
-                                      {'editor': current, 'disk': persisted})
-                records.append(current)
-            cells = self.verify_receipt_cells(session)
-            previous['outcome'] = 'loaded_verified'
-            previous['data'].update(loaded=True, records=records, cells=cells, session=state)
+            records, cells, unverified = [], None, None
+            try:
+                for record in self.project.records:
+                    self.select(record.editor_id, session)
+                    current = self.call('object.read', record.editor_id, session=session)
+                    self.call('object.cancel', record.editor_id, session=session)
+                    persisted = self.persisted(record.editor_id)[1]
+                    if current['modelPath'] != persisted['modelPath']:
+                        raise BridgeError('STALE_STATE', 'Loaded model differs from persisted plugin',
+                                          {'editor': current, 'disk': persisted})
+                    records.append(current)
+                cells = self.verify_receipt_cells(session)
+            except BridgeError as error:
+                if error.code == 'EDITOR_UNRESPONSIVE':
+                    return dict(still_loading(str(error)), windows=windows)
+                if error.code not in UNVERIFIABLE:
+                    raise
+                # The plugin is active (title) but the check itself could not run (e.g. a hidden Cell View).
+                unverified = {'code': error.code, 'message': str(error)}
+            outcome = 'loaded_unverified' if unverified else 'loaded_verified'
+            previous['outcome'] = outcome
+            previous['data'].update(loaded=True, records=records, cells=cells, session=state, windows=windows,
+                                    verification={'ok': not unverified, 'skipped': unverified})
+            if unverified:
+                previous['data']['next'] = ('GECK shows the plugin, but the cell check could not run. Try '
+                                            'geck_show_windows, then geck_cell_verify; or look at GECK.')
             with closing(self.db()) as db, db:
                 db.execute('UPDATE operations SET state=?, result=? WHERE id=?',
-                           ('loaded_verified', json.dumps(previous), operation_id))
+                           (outcome, json.dumps(previous), operation_id))
             return {'load': previous, 'loading': False}
         return self.run('geck_plugin_load_status', {'operation_id': operation_id}, action)
+
+    def loaded_plugin(self, session):
+        """SHA-256 of the plugin file this GECK session last finished loading through the bridge, or None."""
+        with closing(self.db()) as db:
+            rows = db.execute("SELECT result FROM operations WHERE project=? AND name='geck_plugin_load' AND "
+                              "state IN ('loaded_verified', 'loaded_unverified') ORDER BY started DESC LIMIT 50",
+                              (self.project.project_id,)).fetchall()
+        for row in rows:
+            data = (json.loads(row['result']) or {}).get('data') or {}
+            if data.get('sessionId') == session:
+                return (data.get('file') or {}).get('sha256')
+        return None
+
+    def restore_windows(self, session):
+        """Show GECK's Object Window, Cell View and Render Window if they are hidden. Never raises."""
+        try:
+            return self.call('windows.show', session=session)
+        except BridgeError as error:
+            return {'error': {'code': error.code, 'message': str(error)}}
+
+    def show_windows(self, session=None):
+        def action():
+            # Open dialogs are no reason to refuse: the helper itself refuses while GECK's main window is
+            # disabled (a modal dialog or a load in progress).
+            sid = self.check_session(session, require_plugin=False, no_dialogs=False)['sessionId']
+            return self.call('windows.show', session=sid)
+        return self.run('geck_show_windows', {'session': session}, action)
 
     def verify_receipt_cells(self, session):
         """For spec projects whose installed plugin is the current build: check every cell's references."""
@@ -414,14 +602,14 @@ class Service:
         if not found['found']:
             raise BridgeError('RECORD_NOT_FOUND', 'Configured record absent from the scoped Object Window', found)
 
-    def find(self, query, offset, limit, session):
+    def find(self, query, offset, limit, session=None):
         def action():
-            self.check_session(session)
+            sid = self.check_session(session)['sessionId']
             selected = [r for r in self.project.records if query.lower() in r.editor_id.lower()]
             rows = []
             for r in selected[offset:offset + limit]:
                 self.persisted(r.editor_id)
-                self.select(r.editor_id, session)
+                self.select(r.editor_id, sid)
                 rows.append(r.model_dump())
             return {'scope': 'configured STAT records verified in editor and disk', 'rows': rows,
                     'total': len(selected), 'nextOffset': offset + limit if offset + limit < len(selected) else None,
@@ -433,37 +621,38 @@ class Service:
             snapshot, record = self.persisted(editor_id)
             if source == 'disk':
                 return {'source': 'disk', 'file': snapshot, 'record': record}
-            self.check_session(session)
-            self.select(editor_id, session)
-            current = self.call('object.read', editor_id, session=session)
-            self.call('object.cancel', editor_id, session=session)
+            sid = self.check_session(session)['sessionId']
+            self.select(editor_id, sid)
+            current = self.call('object.read', editor_id, session=sid)
+            self.call('object.cancel', editor_id, session=sid)
             return {'source': 'editor', 'record': dict(record, modelPath=current['modelPath']),
                     'identitySource': 'disk plus exact editor ID in scoped Static dialog', 'dialogClosed': True}
         return self.run('geck_record_read', dict(editor_id=editor_id, source=source, session=session),
                         action, editor=source != 'disk')
 
     def set_model(self, editor_id, model_path, expected_model, expected_hash, session, request_key):
+        # session may be None: the running editor is adopted; expected_model and expected_hash still guard.
         def action():
             # Validate after durable replay lookup: a historical receipt remains
             # retrievable even if an asset has since moved or been removed.
             self.project.record(editor_id)
             if not model_asset(self.project, model_path).is_file():
                 raise ValueError('model file does not exist under configured meshes root')
-            self.check_session(session)
+            sid = self.check_session(session)['sessionId']
             snapshot, _ = self.persisted(editor_id)
             if snapshot['sha256'] != expected_hash:
                 raise BridgeError('STALE_STATE', 'Plugin changed since it was read', snapshot)
-            self.select(editor_id, session)
-            current = self.call('object.read', editor_id, session=session)
+            self.select(editor_id, sid)
+            current = self.call('object.read', editor_id, session=sid)
             if current['modelPath'] != expected_model:
-                self.call('object.cancel', editor_id, session=session)
+                self.call('object.cancel', editor_id, session=sid)
                 raise BridgeError('STALE_STATE', 'Editor model differs from expected value', current)
             if current['modelPath'] == model_path:
-                self.call('object.cancel', editor_id, session=session)
+                self.call('object.cancel', editor_id, session=sid)
                 return {'changed': False, 'modelPath': model_path, 'pluginSaved': False}
-            edited = self.call('object.setModel', editor_id, model_path, session=session,
+            edited = self.call('object.setModel', editor_id, model_path, session=sid,
                                expected_model=expected_model)
-            self.call('object.cancel', editor_id, session=session)
+            self.call('object.cancel', editor_id, session=sid)
             return {'_outcome': 'committed_in_editor', 'changed': True, 'edit': edited,
                     'pluginSaved': False, 'dialogClosed': True}
         return self.run('geck_record_set_model', dict(editor_id=editor_id, model_path=model_path,
@@ -472,11 +661,11 @@ class Service:
 
     def preview(self, editor_id, session, opening):
         def action():
-            self.check_session(session)
+            sid = self.check_session(session)['sessionId']
             self.persisted(editor_id)
             if opening:
-                self.select(editor_id, session)
-            return self.call('preview.open' if opening else 'preview.close', editor_id, session=session)
+                self.select(editor_id, sid)
+            return self.call('preview.open' if opening else 'preview.close', editor_id, session=sid)
         name = 'geck_preview_open' if opening else 'geck_preview_close'
         return self.run(name, dict(editor_id=editor_id, session=session), action)
 
@@ -497,6 +686,7 @@ class Service:
     def save(self, expected_models, expected_hash, session, request_key):
         def action():
             state = self.check_session(session)
+            sid = state['sessionId']
             before, data = file_snapshot(self.project.plugin_path)
             if before['sha256'] != expected_hash:
                 raise BridgeError('STALE_STATE', 'Plugin changed before save preflight', before)
@@ -517,18 +707,18 @@ class Service:
                 raise BridgeError('BACKUP_MISMATCH', 'Recovery copy does not match pre-save bytes')
             # Check the in-editor expectations before dispatch, closing only our dialogs.
             for editor_id, model in expected_models.items():
-                self.select(editor_id, session)
-                current = self.call('object.read', editor_id, session=session)
-                self.call('object.cancel', editor_id, session=session)
+                self.select(editor_id, sid)
+                current = self.call('object.read', editor_id, session=sid)
+                self.call('object.cancel', editor_id, session=sid)
                 if current['modelPath'] != model:
                     raise BridgeError('STALE_STATE', 'Editor model differs from save expectation', current)
-            state = self.check_session(session)
+            state = self.check_session(sid)
             if state['unsavedChanges']:
-                saved = self.call('plugin.save', before['sha256'], session=session)
+                saved = self.call('plugin.save', before['sha256'], session=sid)
             else:
                 saved = {'changed': False, 'reason': 'editor already clean'}
             after, persisted = file_snapshot(self.project.plugin_path)
-            final_state = self.check_session(session)
+            final_state = self.check_session(sid)
             if final_state['unsavedChanges']:
                 raise BridgeError('SAVE_UNCONFIRMED', 'Editor has pending changes after save verification')
             rows = []
@@ -548,19 +738,22 @@ class Service:
     def cell_verify(self, cell_id, session, receipt, frame_form_id=None):
         """Tier 3: compare Cell View's reference list with a build receipt; optionally frame one reference."""
         def action():
-            self.check_session(session)
+            sid = self.check_session(session)['sessionId']
             if receipt.get('plugin') != self.project.plugin:
                 raise ValueError('receipt is for %s, project plugin is %s' % (receipt.get('plugin'), self.project.plugin))
             snapshot, _ = file_snapshot(self.project.plugin_path)
             if snapshot['sha256'] != receipt['sha256']:
                 raise BridgeError('STALE_STATE', 'Installed plugin differs from the receipt build', snapshot)
-            shown = self.call('cell.refs', cell_id, session=session)
+            windows = self.restore_windows(sid)
+            shown = self.call('cell.refs', cell_id, session=sid)
             match = match_cell_references(receipt, cell_id, shown)
             out = {'cell': cell_id, 'match': match, 'columns': shown.get('columns'), 'rows': shown.get('rows')}
+            if windows.get('shown'):
+                out['windowsRestored'] = windows['shown']
             if not match['ok']:
                 raise BridgeError('CELL_MISMATCH', 'Cell View does not match the build receipt', out)
             if frame_form_id:
-                out['camera'] = self.call('cell.show', cell_id, frame_form_id, session=session)
+                out['camera'] = self.call('cell.show', cell_id, frame_form_id, session=sid)
             return out
         return self.run('geck_cell_verify', dict(cell=cell_id, session=session, sha256=receipt.get('sha256'),
                                                  frame=frame_form_id), action)
@@ -601,6 +794,7 @@ class Service:
         return self.run('geck_plugin_build', {'spec': spec_hash}, action, request_key, editor=False)
 
     def plugin_install(self, session, request_key, allow_replace_foreign=None):
+        # session may be None (adopt the running editor); install still refuses a dirty or edited plugin.
         def action():
             state = self.check_session(session, require_plugin=False, no_dialogs=False)
             entry = self._authoring_call(lambda: self.authoring().install(state['editorTitle'], allow_replace_foreign))
@@ -621,7 +815,7 @@ class Service:
                         lambda: self._authoring_call(lambda: self.authoring().lookup(query, record_type, limit)),
                         editor=False)
 
-    def cell_verify_ref(self, cell_id, session, frame_ref_id=None):
+    def cell_verify_ref(self, cell_id, session=None, frame_ref_id=None):
         receipt = self._authoring_call(lambda: self.authoring().receipt())
         frame = None
         if frame_ref_id:
@@ -634,17 +828,19 @@ class Service:
     def acknowledge(self, operation_id, session, expected_hash, note):
         def action():
             previous = self.operation(operation_id)
-            self.check_session(session, require_plugin=previous['operation'] != 'geck_plugin_load', no_dialogs=True)
+            state = self.check_session(session, require_plugin=previous['operation'] != 'geck_plugin_load',
+                                       no_dialogs=True)
             snapshot, _ = file_snapshot(self.project.plugin_path)
             if snapshot['sha256'] != expected_hash:
                 raise BridgeError('STALE_STATE', 'Disk changed during recovery review')
             with closing(self.db()) as db, db:
                 row = db.execute('SELECT * FROM operations WHERE id=? AND project=?',
                                  (operation_id, self.project.project_id)).fetchone()
-                if row is None or row['state'] not in ('running', 'outcome_unknown', 'loading'):
+                if row is None or row['state'] not in UNRESOLVED or row['recovery_ack']:
                     raise ValueError('operation is not an unresolved operation in this project')
                 db.execute('UPDATE operations SET recovery_ack=? WHERE id=?',
-                           (json.dumps(dict(session=session, file=snapshot, note=note, time=time.time())), operation_id))
+                           (json.dumps(dict(session=state['sessionId'], file=snapshot, note=note, time=time.time())),
+                            operation_id))
             return {'acknowledged': operation_id, 'note': note,
                     'warning': 'Barrier cleared; this is not rollback or proof of the prior result'}
         return self.run('geck_recovery_acknowledge', dict(operation_id=operation_id, session=session,
@@ -688,9 +884,34 @@ class Service:
 
     def render_capture(self, cutout=False):
         from . import imaging
-        from .photo import MAC_TITLE_BAR_POINTS
+        import os
+
+        def action_windows():
+            from . import wincapture
+            window = wincapture.render_window()
+            folder = self.project.state_dir.parent / 'photos'
+            stamp = time.strftime('%Y%m%d-%H%M%S')
+            # PrintWindow sometimes returns only the grey window background for GECK's Direct3D view, and a
+            # freshly loaded cell takes a moment to draw: retry a blank capture, asking GECK to repaint, for ~12 s.
+            deadline, tries = time.monotonic() + 12, 0
+            while True:
+                shot = wincapture.capture(window, folder / ('render-%s.png' % stamp), repaint=tries > 0)
+                tries += 1
+                if not shot['blank'] or time.monotonic() > deadline:
+                    break
+            out = {'photo': shot['path'], 'size': shot['size'], 'client': shot['client'], 'window': window['title'],
+                   'method': shot['method'], 'pixels': shot['stats'], 'blank': shot['blank'],
+                   'attempts': shot['attempts'], 'tries': tries}
+            if shot['blank']:
+                raise imaging.ImagingError('CAPTURE_BLANK', 'The Render Window capture is one flat colour (blank '
+                                           'or black): load a cell (geck_cell_verify with frame_ref_id) or check '
+                                           'that GECK is not minimised', dict(out, attempts=shot['attempts']))
+            if cutout:
+                out['cutout'] = imaging.cutout(shot['path'], folder / ('render-%s-cutout.png' % stamp))
+            return out
 
         def action():
+            from .photo import MAC_TITLE_BAR_POINTS
             window = imaging.render_window()
             folder = self.project.state_dir.parent / 'photos'
             stamp = time.strftime('%Y%m%d-%H%M%S')
@@ -705,7 +926,7 @@ class Service:
             if cutout:
                 out['cutout'] = imaging.cutout(path, folder / ('render-%s-cutout.png' % stamp))
             return out
-        return self._envelope('geck_render_capture', time.monotonic(), action)
+        return self._envelope('geck_render_capture', time.monotonic(), action_windows if os.name == 'nt' else action)
 
     def image_cutout(self, path, tolerance=30, chroma_tolerance=22):
         from . import imaging

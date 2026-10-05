@@ -1,9 +1,12 @@
 """Load a project's plugin in GECK through the bridge and wait until it is verified.
 
-    .venv/bin/python live_load.py --project projects/coolworld.json [--timeout 780]
+    .venv/bin/python live_load.py --project projects/coolworld.json [--timeout 780] [--if-needed]
 
 Uses the same Service the MCP server uses (persistent worker). Prints each poll and
 writes evidence/live-load-<operation>.json. Loading FalloutNV.esm takes minutes.
+Exit 0 when the load ends loaded_verified, or loaded_unverified (the plugin is active but the cell
+check could not run; the last line says why). --if-needed skips the load when this GECK session already
+loaded the same plugin bytes through the bridge and has no unsaved changes.
 """
 import argparse
 import json
@@ -23,6 +26,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=780)
+    parser.add_argument('--if-needed', action='store_true',
+                        help='skip when GECK already has these exact plugin bytes loaded')
     args = parser.parse_args()
     project = Project.load(args.project)
     service = Service(project)
@@ -36,9 +41,16 @@ def main():
         state = status['data']
         snapshot, _ = file_snapshot(project.plugin_path)
         loaded_title = 'Garden of Eden Creation Kit - [%s]' % project.plugin
+        if (args.if_needed and state['editorTitle'] == loaded_title and not state['unsavedChanges']
+                and service.loaded_plugin(state['sessionId']) == snapshot['sha256']):
+            print(json.dumps({'skipped': 'GECK already has this plugin loaded', 'sha256': snapshot['sha256'],
+                              'outcome': 'already_loaded'}))
+            return 0
         load = service.load_plugin(state['sessionId'], state['editorTitle'], snapshot['sha256'],
                                    'live-load-' + str(uuid.uuid4()), reload=state['editorTitle'] == loaded_title)
-        print(json.dumps({'load': {k: load.get(k) for k in ('ok', 'outcome', 'operationId', 'error')}}), flush=True)
+        released = (load.get('data') or {}).get('releasedStaleOperations') if isinstance(load.get('data'), dict) else None
+        print(json.dumps({'load': {k: load.get(k) for k in ('ok', 'outcome', 'operationId', 'error')},
+                          **({'releasedStaleOperations': released} if released else {})}), flush=True)
         if not load['ok']:
             return 2
         if load['outcome'] != 'loading':
@@ -53,14 +65,16 @@ def main():
             print(json.dumps({'t': round(time.monotonic() - started), 'ok': result['ok'], 'outcome': outcome,
                               'observation': data.get('lastObservation'),
                               'error': result.get('error')}), flush=True)
-            if not result['ok'] or outcome == 'loaded_verified':
+            if not result['ok'] or outcome in ('loaded_verified', 'loaded_unverified'):
                 break
         evidence = ROOT / 'evidence' / ('live-load-%s.json' % load['operationId'])
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text(json.dumps({'load': load, 'final': result,
                                         'seconds': round(time.monotonic() - started)}, indent=1) + '\n')
-        print(json.dumps({'evidence': str(evidence), 'seconds': round(time.monotonic() - started)}))
-        return 0 if result and result['ok'] and outcome == 'loaded_verified' else 3
+        load_data = ((result or {}).get('data') or {}).get('load') or {}
+        print(json.dumps({'outcome': outcome, 'verification': (load_data.get('data') or {}).get('verification'),
+                          'evidence': str(evidence), 'seconds': round(time.monotonic() - started)}))
+        return 0 if result and result['ok'] and outcome in ('loaded_verified', 'loaded_unverified') else 3
     finally:
         service.close()
 

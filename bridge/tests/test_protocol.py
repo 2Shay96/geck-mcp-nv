@@ -23,7 +23,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             listing = await client.list_tools()
             tools = listing.tools if hasattr(listing, 'tools') else listing
             by_name = {tool.name: tool for tool in tools}
-            self.assertEqual(len(by_name), 24)
+            self.assertEqual(len(by_name), 25)
+            self.assertIn('geck_show_windows', by_name)
             for name in ('geck_actor_photo', 'geck_render_capture', 'geck_image_cutout'):
                 self.assertIn(name, by_name)
             self.assertIn('RESUMABLE', by_name['geck_actor_photo'].description)
@@ -39,6 +40,33 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('Fixture.esp', str(resource))
             prompt = await client.get_prompt('update_static_model', {'editor_id':'FixtureStatic','model_path':'fixture\\new.nif'})
             self.assertIn('whole-plugin', str(prompt))
+
+    async def test_session_argument_is_optional_everywhere(self):
+        # 5 Oct 2026: the Claude desktop device proxy dropped tool arguments named session_id, so every
+        # session-taking tool failed with "session_id Field required". None of them may require it now.
+        async with Client(make_server(self.fixture.p, self.fixture.service)) as client:
+            listing = await client.list_tools()
+            tools = listing.tools if hasattr(listing, 'tools') else listing
+            for tool in tools:
+                schema = tool.input_schema if hasattr(tool, 'input_schema') else tool.inputSchema
+                required = schema.get('required', [])
+                self.assertNotIn('session_id', required, tool.name)
+                self.assertNotIn('editor_session', required, tool.name)
+                if 'session_id' in schema.get('properties', {}):
+                    self.assertIn('editor_session', schema['properties'], tool.name)
+            # What the proxy forwarded: only the other arguments.
+            for args in ({}, {'editor_session': '100:123'}, {'session_id': '100:123'},
+                         {'editor_session': '100:123', 'session_id': '100:123'}):
+                result = await client.call_tool('geck_project_attach', args)
+                self.assertFalse(result.is_error, (args, result))
+            result = await client.call_tool('geck_project_attach', {'editor_session': '100:123', 'session_id': '9:9'})
+            self.assertTrue(result.is_error)
+            result = await client.call_tool('geck_project_attach', {'editor_session': 'wrong-session'})
+            self.assertTrue(result.is_error)
+            result = await client.call_tool('geck_show_windows', {})
+            self.assertFalse(result.is_error, result)
+            result = await client.call_tool('geck_record_read', {'editor_id': 'FixtureStatic', 'source': 'editor'})
+            self.assertFalse(result.is_error, result)
 
     async def test_real_stdio_process(self):
         path = Path(self.fixture.tmp.name)/'project.json'

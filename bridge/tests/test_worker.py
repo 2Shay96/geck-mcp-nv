@@ -190,11 +190,13 @@ class WorkerTests(unittest.TestCase):
 
 class ServiceBatchTests(unittest.TestCase):
     def test_select_uses_one_batch_step(self):
-        from tests.test_service import FakeTransport, plugin
+        from tests.test_service import FakeTransport, NATIVE, plugin
         from geck_mcp.service import Service
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             p = project(root)
+            if NATIVE:
+                p = p.model_copy(update={'launcher': 'native', 'wine': None, 'bottle': None})
             p.plugin_path.write_bytes(plugin())
 
             class Batching(FakeTransport):

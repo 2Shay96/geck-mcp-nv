@@ -13,12 +13,12 @@ The bridge is the original part of GECK MCP for New Vegas. It has two layers:
 
 | Launcher (`"launcher"` in the profile) | Platform | Status |
 | --- | --- | --- |
-| `native` | Windows | **Tested** on Windows 11 with the vanilla Steam GECK: status, build, install, plugin load, cell verify ([docs/TESTING.md](../docs/TESTING.md)) |
+| `native` | Windows | **Tested** on Windows 11 with the vanilla Steam GECK: status, build, install, plugin load and reload, cell verify, Render Window capture, preview, script compile, crash recovery ([docs/TESTING.md](../docs/TESTING.md)) |
 | `wine` | Linux (Wine/Proton) | **Untested.** The helper must run in the same prefix as GECK |
 | `crossover` | macOS + CrossOver | Tested on Mac via CrossOver (not a supported platform) |
 
-Also untested: GECK Extender, and non-English GECK. The 133 unit tests (plus 6 parser tests) pass on Linux; on Windows
-27 of them fail because their fixtures assume POSIX/CrossOver paths (see TESTING.md).
+Also untested: GECK Extender, and non-English GECK. The unit tests (plus 6 parser tests) pass on Linux and Windows 11;
+CI runs them on Ubuntu, macOS and Windows.
 
 ## Setup
 
@@ -51,26 +51,31 @@ python3 -m venv .venv
 5. Ask your agent: *"Validate the spec, build the plugin and show me what it contains."*
    This uses `geck_spec_validate`, then `geck_plugin_build`, then `geck_plugin_inspect`, and touches nothing in the game.
 
-## The 24 tools
+## The 25 tools
 
 | Group | Tools |
 | --- | --- |
 | Offline authoring | `geck_spec_validate`, `geck_plugin_build`, `geck_plugin_inspect`, `geck_master_lookup`, `geck_plugin_install` |
-| Editor state | `geck_status`, `geck_inspect_windows`, `geck_capabilities`, `geck_project_attach` |
+| Editor state | `geck_status`, `geck_inspect_windows`, `geck_show_windows`, `geck_capabilities`, `geck_project_attach` |
 | Load & verify | `geck_plugin_load`, `geck_plugin_load_status`, `geck_cell_verify` |
 | Records | `geck_records_find`, `geck_record_read`, `geck_record_set_model`, `geck_preview_open`, `geck_preview_close` |
 | Save & check | `geck_plugin_save`, `geck_plugin_validate` |
 | Recovery | `geck_operation_get`, `geck_recovery_acknowledge` |
-| Pictures (macOS only for now) | `geck_actor_photo`, `geck_render_capture`, `geck_image_cutout` |
+| Pictures | `geck_render_capture` (Windows and macOS), `geck_image_cutout`, `geck_actor_photo` (macOS only for now) |
 
-The same jobs are available from the command line: `build_plugin.py`, `install_plugin.py`, `live_load.py`, `cell_verify.py`,
-`compile_scripts.py` (build, then load in GECK, compile every script, save and cache the compiled bytecode),
+Tools that act on the running GECK take an optional `editor_session`; leave it out to use the GECK that is running
+(see [docs/MCP-QUICKSTART.md](docs/MCP-QUICKSTART.md)). After changing bridge code, restart your MCP client.
+
+The same jobs are available from the command line: `build_plugin.py` (`--project` uses the profile's state and build
+folders), `install_plugin.py`, `live_load.py` (`--if-needed`), `cell_verify.py`, `compile_scripts.py` (build, then load in
+GECK, compile every script, save and cache the compiled bytecode), `recover.py` (list or clear recovery barriers),
 `photo_cli.py`, and `sprite_flipbook.py` (an animated sprite billboard NIF from PNG frames; needs PyFFI).
 
 ## Safety built in
 
 - Every edit uses a request key. Repeats are refused or replayed, never run twice.
-- Operations are journaled in SQLite. An interrupted operation blocks further edits until you review and acknowledge it.
+- Operations are journaled in SQLite. An interrupted operation blocks further edits until you review and acknowledge it,
+  or until GECK has been restarted (then it is released automatically as `stale`).
 - Install and save make content-addressed backups and check hashes before and after.
 - The bridge refuses to load anything if GECK has unsaved changes, and never discards your work.
 
@@ -82,6 +87,9 @@ The same jobs are available from the command line: `build_plugin.py`, `install_p
 - Control IDs and menu captions are from the English vanilla GECK.
 - `Probe.cs` still contains early experimental operations (`cell.load`, `window.layout.place`, `object.place`) that
   only accept the author's test objects and use real mouse input. The MCP server does not use them.
-- Photos use macOS `screencapture`. A Win32 capture is planned.
+- Actor photos use macOS `screencapture`. `geck_render_capture` also works on Windows: PrintWindow at the size GECK
+  renders (works when other windows cover it). PrintWindow sometimes returns only the grey window background, so a
+  blank result is retried with a repaint request (about 12 s), then a DPI-aware screen copy is tried if nothing
+  covers the Render Window. Look at the PNG: the tool only checks that it is not one flat colour.
 
 Docs: [docs/MCP-QUICKSTART.md](docs/MCP-QUICKSTART.md) · [docs/PHOTO.md](docs/PHOTO.md) · [docs/M1-FAST-BRIDGE.md](docs/M1-FAST-BRIDGE.md)

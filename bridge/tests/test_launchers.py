@@ -1,4 +1,5 @@
 """Helper command lines for the three launchers (crossover tested live; wine/native only here)."""
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -14,7 +15,11 @@ def project(**extra):
     return Project(**base), root
 
 
+WINE_HOST = unittest.skipIf(os.name == 'nt', 'Wine/CrossOver launchers run on macOS or Linux hosts')
+
+
 class LauncherTests(unittest.TestCase):
+    @WINE_HOST
     def test_crossover_command_and_env(self):
         p, root = project(launcher='crossover', wine=Path('/cx/wine'), bottle=Path('/b/Steam'))
         self.assertEqual(p.helper_command('status'),
@@ -23,6 +28,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(p.helper_env(), {'WINEPREFIX': '/b/Steam'})
         self.assertEqual(p.lock_root, Path('/b/Steam'))
 
+    @WINE_HOST
     def test_wine_command_uses_prefix(self):
         p, root = project(launcher='wine', wine=Path('/proton/bin/wine'), bottle=Path('/pfx'))
         self.assertEqual(p.helper_command('inspect', 5)[0], '/proton/bin/wine')

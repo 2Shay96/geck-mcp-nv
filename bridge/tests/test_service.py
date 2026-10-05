@@ -1,4 +1,6 @@
+from contextlib import closing
 import json
+import os
 from pathlib import Path
 import struct
 import tempfile
@@ -10,6 +12,19 @@ from geck_mcp.config import Project, model_asset
 from geck_mcp.service import Service
 from geck_mcp.transport import BridgeError
 from esp_check import file_snapshot
+
+
+# Tests run against the launcher of the host: native on Windows, CrossOver-style (Z:\ paths) elsewhere.
+NATIVE = os.name == 'nt' or os.environ.get('GECK_TEST_NATIVE') == '1'
+
+
+def host_launcher(root):
+    return {'launcher': 'native'} if NATIVE else {'wine': root / 'wine', 'bottle': root / 'bottle'}
+
+
+def editor_executable(project):
+    exe = project.game_root / 'GECK.exe'
+    return str(exe) if project.launcher == 'native' else 'Z:' + str(exe).replace('/', '\\')
 
 
 def plugin(model='fixture\\old.nif'):
@@ -28,6 +43,7 @@ class FakeTransport:
         self.model, self.dirty, self.dialog = 'fixture\\old.nif', False, False
         self.fail_set = False
         self.session = '100:123'
+        self.loaded = True             # False: GECK shows no plugin until data.load
 
     def call(self, operation, *args, session=None, expected_model=None):
         self.calls.append(operation)
@@ -35,12 +51,18 @@ class FakeTransport:
             raise BridgeError('STALE_SESSION', 'Editor restarted')
         if operation == 'status':
             return dict(sessionId=self.session,
-                        executable='Z:' + str(self.project.game_root / 'GECK.exe').replace('/', '\\'),
-                        editorTitle=f'Garden of Eden Creation Kit - [{self.project.plugin}]' + ('*' if self.dirty else ''),
+                        executable=editor_executable(self.project),
+                        editorTitle=(f'Garden of Eden Creation Kit - [{self.project.plugin}]' if self.loaded
+                                     else 'Garden of Eden Creation Kit') + ('*' if self.dirty else ''),
                         unsavedChanges=self.dirty,
                         windows=[{'class': '#32770', 'text': 'Static'}] if self.dialog else [])
         if operation == 'objects.find':
             return {'found': True}
+        if operation == 'windows.show':
+            return {'shown': [], 'allVisible': True}
+        if operation == 'data.load':
+            self.loaded = True
+            return {'loadDispatched': True}
         if operation == 'object.read':
             self.dialog = True
             return {'modelPath': self.model}
@@ -62,7 +84,7 @@ class ServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.p = Project(project_id='test', wine=root/'wine', bottle=root/'bottle',
+        self.p = Project(project_id='test', **host_launcher(root),
                          game_root=root/'game', plugin='Fixture.esp', state_dir=root/'state',
                          helper=root/'helper', records=[dict(editor_id='FixtureStatic', form_id='01000ADD')])
         mesh = self.p.game_root/'Data/meshes/fixture'
@@ -73,8 +95,12 @@ class ServiceTests(unittest.TestCase):
         self.transport = FakeTransport(self.p)
         self.service = Service(self.p, self.transport)
         self.hash = file_snapshot(self.p.plugin_path)[0]['sha256']
+        # Most tests reload the already-shown plugin; trust its completion at once (see the reload tests below).
+        self.settle = patch('geck_mcp.service.RELOAD_SETTLE_SECONDS', 0)
+        self.settle.start()
 
     def tearDown(self):
+        self.settle.stop()
         self.tmp.cleanup()
 
     def edit(self, key='edit-1', old='fixture\\old.nif', new='fixture\\new.nif', session='100:123'):
@@ -168,21 +194,24 @@ class ServiceTests(unittest.TestCase):
                 model_asset(self.p, bad)
         outside = Path(self.tmp.name)/'outside'
         outside.mkdir()
-        (self.p.game_root/'Data/meshes/link').symlink_to(outside)
+        try:
+            (self.p.game_root/'Data/meshes/link').symlink_to(outside)
+        except OSError as error:      # Windows without Developer Mode / admin: no symlinks
+            self.skipTest('cannot create symlinks here: %s' % error)
         with self.assertRaises(ValueError):
             model_asset(self.p, 'link\\outside.nif')
 
     def test_lock_contention_returns_busy(self):
-        with bottle_lock(self.p.bottle):
+        with bottle_lock(self.p.lock_root):
             result = self.service.status()
         self.assertFalse(result['ok'])
         self.assertIn('EDITOR_BUSY', result['error']['message'])
         self.assertEqual(self.transport.calls, [])
 
     def test_interrupted_journal_survives_restart(self):
-        with self.service.db() as db:
+        with closing(self.service.db()) as db, db:
             db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
-                       ('interrupted','test',str(self.p.bottle),'edit','key','hash','running',None,0,None))
+                       ('interrupted','test',str(self.p.lock_root),'edit','key','hash','running',None,0,None))
         service = Service(self.p, self.transport)
         self.assertEqual(service.attach('100:123')['error']['code'], 'RECOVERY_REQUIRED')
 
@@ -190,9 +219,9 @@ class ServiceTests(unittest.TestCase):
         import hashlib
         args = {'value': 1}
         fingerprint = hashlib.sha256(json.dumps(['edit', args], sort_keys=True).encode()).hexdigest()
-        with self.service.db() as db:
+        with closing(self.service.db()) as db, db:
             db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
-                       ('interrupted','test',str(self.p.bottle),'edit','key',fingerprint,'running',None,0,None))
+                       ('interrupted','test',str(self.p.lock_root),'edit','key',fingerprint,'running',None,0,None))
         result = self.service.run('edit', args, lambda: self.fail('must not redispatch'), 'key', True)
         self.assertFalse(result['ok'])
         self.assertEqual(result['error']['code'], 'OUTCOME_UNKNOWN')
@@ -270,6 +299,10 @@ class ServiceTests(unittest.TestCase):
         checked = self.service.load_status(result['operationId'])
         self.assertEqual(checked['error']['code'], 'STALE_SESSION')
         self.assertEqual(self.service.operation(result['operationId'])['outcome'], 'loading')
+        # GECK restarted, so that load's barrier is gone (fix 2) and new work is not blocked.
+        self.assertEqual(self.service.operation_evidence(result['operationId'])['journalState'], 'stale')
+        self.assertEqual(checked['data']['released']['operationId'], result['operationId'])
+        self.assertTrue(self.service.attach('101:456')['ok'])
 
     def test_reviewed_load_cannot_resume_polling(self):
         result = self.load()
@@ -298,6 +331,204 @@ class ServiceTests(unittest.TestCase):
         reviewed = self.service.acknowledge(result['operationId'], '100:123', self.hash, 'Reviewed clean empty editor')
         self.assertTrue(reviewed['ok'], reviewed)
 
+    # -- 0.2.0: optional editor session (fix 3) -------------------------------------------
+    def test_session_can_be_omitted_and_is_adopted(self):
+        attached = self.service.attach(None)
+        self.assertTrue(attached['ok'], attached)
+        result = self.service.set_model('FixtureStatic', 'fixture\\new.nif', 'fixture\\old.nif', self.hash, None, 'k1')
+        self.assertEqual(result['outcome'], 'committed_in_editor', result)
+        steps = self.service.operation_evidence(result['operationId'])['steps']
+        # After the first status call every helper call is guarded by the adopted session.
+        self.assertEqual(steps[0]['operation'], 'status')
+        self.assertIn('setModel', ' '.join(s['operation'] for s in steps))
+        saved = self.service.save({'FixtureStatic': 'fixture\\new.nif'}, self.hash, None, 'save-x')
+        self.assertTrue(saved['ok'], saved)
+
+    def test_explicit_stale_session_is_still_refused(self):
+        self.assertEqual(self.service.attach('999:1')['error']['code'], 'STALE_SESSION')
+
+    def test_load_without_session(self):
+        result = self.service.load_plugin(None, 'Garden of Eden Creation Kit - [Fixture.esp]', self.hash,
+                                          'load-nosession', reload=True)
+        self.assertEqual(result['outcome'], 'loading', result)
+        self.assertEqual(result['data']['sessionId'], '100:123')
+
+    # -- 0.2.0: stale recovery barriers (fix 2) ------------------------------------------
+    def test_barrier_from_earlier_editor_session_is_released(self):
+        self.transport.fail_set = True
+        failed = self.edit()
+        self.assertEqual(failed['outcome'], 'outcome_unknown')
+        self.assertEqual(self.service.attach(None)['error']['code'], 'RECOVERY_REQUIRED')
+        self.transport.session, self.transport.dialog = '101:456', False     # GECK restarted
+        attached = self.service.attach(None)
+        self.assertTrue(attached['ok'], attached)
+        released = attached['data']['releasedStaleOperations']
+        self.assertEqual([r['operationId'] for r in released], [failed['operationId']])
+        self.assertEqual(released[0]['operationSession'], '100:123')
+        evidence = self.service.operation_evidence(failed['operationId'])
+        self.assertEqual(evidence['journalState'], 'stale')
+        self.assertEqual(evidence['recoveryAck']['auto'], 'stale')
+
+    def test_barrier_with_unknown_session_is_kept(self):
+        with closing(self.service.db()) as db, db:
+            db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+                       ('mystery', 'test', str(self.p.lock_root), 'edit', None, 'h', 'running', None, 0, None))
+        self.transport.session = '101:456'
+        result = self.service.attach(None)
+        self.assertEqual(result['error']['code'], 'RECOVERY_REQUIRED')
+        self.assertEqual(result['data']['unresolved'][0]['operationId'], 'mystery')
+
+    def test_release_stale_needs_a_running_editor(self):
+        self.transport.fail_set = True
+        failed = self.edit()
+        original = self.transport.call
+        def call(operation, *args, **kwargs):
+            if operation == 'status':
+                raise BridgeError('EDITOR_ERROR', 'expected exactly one GECK process; found 0')
+            return original(operation, *args, **kwargs)
+        self.transport.call = call
+        released, blocking = self.service.release_stale()
+        self.assertEqual(released, [])
+        self.assertEqual([r['id'] for r in blocking], [failed['operationId']])
+
+    # -- 0.2.0: hidden windows after a load (fix 1) ---------------------------------------
+    def test_load_status_shows_windows_then_verifies(self):
+        result = self.load()
+        done = self.service.load_status(result['operationId'])
+        self.assertEqual(done['data']['load']['outcome'], 'loaded_verified', done)
+        self.assertIn('windows.show', self.transport.calls)
+        self.assertLess(self.transport.calls.index('windows.show'), self.transport.calls.index('object.read'))
+
+    def test_hidden_cell_view_gives_loaded_unverified_and_no_barrier(self):
+        result = self.load()
+        original = self.transport.call
+        def call(operation, *args, **kwargs):
+            if operation == 'objects.find':
+                raise BridgeError('EDITOR_ERROR', 'object list selector matched 0 controls')
+            return original(operation, *args, **kwargs)
+        self.transport.call = call
+        done = self.service.load_status(result['operationId'])
+        self.assertTrue(done['ok'], done)
+        load = done['data']['load']
+        self.assertEqual(load['outcome'], 'loaded_unverified')
+        self.assertFalse(load['data']['verification']['ok'])
+        self.assertIn('selector matched 0', load['data']['verification']['skipped']['message'])
+        self.assertEqual(self.service.operation_evidence(result['operationId'])['journalState'], 'loaded_unverified')
+        self.transport.call = original
+        self.assertTrue(self.service.attach(None)['ok'])            # no barrier left behind
+        self.assertEqual(self.service.loaded_plugin('100:123'), self.hash)
+
+    def test_unresponsive_during_verification_keeps_polling(self):
+        result = self.load()
+        original = self.transport.call
+        def call(operation, *args, **kwargs):
+            if operation == 'objects.find':
+                raise BridgeError('EDITOR_UNRESPONSIVE', 'message timed out or failed')
+            return original(operation, *args, **kwargs)
+        self.transport.call = call
+        pending = self.service.load_status(result['operationId'])
+        self.assertTrue(pending['data']['loading'], pending)
+        self.assertEqual(self.service.operation(result['operationId'])['outcome'], 'loading')
+
+    def test_show_windows_is_allowed_during_recovery(self):
+        self.transport.fail_set = True
+        self.edit()
+        shown = self.service.show_windows(None)
+        self.assertTrue(shown['ok'], shown)
+        self.assertEqual(self.transport.calls[-1], 'windows.show')
+
+    def test_status_reports_hidden_render_window(self):
+        original = self.transport.call
+        def call(operation, *args, **kwargs):
+            value = original(operation, *args, **kwargs)
+            if operation == 'status':
+                value = dict(value, editorWindows={
+                    'objectWindow': {'found': True, 'visible': True, 'reachable': True},
+                    'cellView': {'found': True, 'visible': True, 'reachable': True},
+                    'renderWindow': {'found': True, 'visible': False, 'reachable': False}})
+            return value
+        self.transport.call = call
+        status = self.service.status()['data']
+        self.assertFalse(status['renderWindowReachable'])
+        self.assertEqual(status['windowsVisible'], {'objectWindow': True, 'cellView': True, 'renderWindow': False})
+        self.assertIn('geck_show_windows', status['hint'])
+
+    def test_loaded_plugin_is_per_session(self):
+        result = self.load()
+        self.service.load_status(result['operationId'])
+        self.assertEqual(self.service.loaded_plugin('100:123'), self.hash)
+        self.assertIsNone(self.service.loaded_plugin('101:456'))
+
+    def failing_data_load(self, cancel_ok=True, uncertain=False):
+        original = self.transport.call
+        def call(operation, *args, **kwargs):
+            if operation == 'data.load':
+                if uncertain:
+                    raise BridgeError('OUTCOME_UNKNOWN', 'Helper exceeded deadline; inspect before retry', uncertain=True)
+                raise BridgeError('EDITOR_ERROR', 'Data row toggle did not change actual image state')
+            if operation == 'data.cancel' and not cancel_ok:
+                raise BridgeError('EDITOR_ERROR', 'Data dialog selector matched 0 windows')
+            return original(operation, *args, **kwargs)
+        self.transport.call = call
+
+    def test_load_failing_before_ok_cancels_and_leaves_no_barrier(self):
+        # Job 049 (5 Oct): a Data checkbox toggle failed; the dialog was left open and a barrier stayed behind.
+        self.failing_data_load()
+        result = self.load('load-toggle')
+        self.assertEqual(result['outcome'], 'failed_before_change', result)
+        self.assertIn('nothing loaded', result['error']['message'])
+        self.assertIn('mouse', result['error']['message'])
+        self.assertIn('data.cancel', self.transport.calls)
+        self.assertTrue(self.service.attach(None)['ok'])
+
+    def test_load_failure_with_failed_cancel_keeps_barrier(self):
+        self.failing_data_load(cancel_ok=False)
+        result = self.load('load-nocancel')
+        self.assertEqual(result['outcome'], 'outcome_unknown')
+        self.assertEqual(self.service.attach(None)['error']['code'], 'RECOVERY_REQUIRED')
+
+    def test_load_timeout_is_never_cancelled(self):
+        self.failing_data_load(uncertain=True)
+        result = self.load('load-timeout')
+        self.assertEqual(result['outcome'], 'outcome_unknown')
+        self.assertNotIn('data.cancel', self.transport.calls)
+
+    # -- reload completion (job 051): the title names the plugin before and after a reload -------------
+    def test_reload_is_not_trusted_before_it_is_seen(self):
+        self.settle.stop()
+        self.settle = patch('geck_mcp.service.RELOAD_SETTLE_SECONDS', 45)
+        self.settle.start()
+        result = self.load('reload-1')
+        self.assertTrue(result['data']['reload'])
+        first = self.service.load_status(result['operationId'])
+        self.assertTrue(first['data']['loading'], first)
+        self.assertIn('reload dispatched', first['data']['lastObservation'])
+        self.transport.loaded = False                   # GECK is reloading: plain title
+        second = self.service.load_status(result['operationId'])
+        self.assertTrue(second['data']['loading'])
+        self.assertTrue(self.service.operation(result['operationId'])['data']['loadingObserved'])
+        self.transport.loaded = True
+        done = self.service.load_status(result['operationId'])
+        self.assertEqual(done['data']['load']['outcome'], 'loaded_verified', done)
+
+    def test_reload_trusted_after_settle_time(self):
+        self.settle.stop()
+        self.settle = patch('geck_mcp.service.RELOAD_SETTLE_SECONDS', 45)
+        self.settle.start()
+        result = self.load('reload-2')
+        with patch('geck_mcp.service.time.time', return_value=result['data']['dispatchedAt'] + 46):
+            done = self.service.load_status(result['operationId'])
+        self.assertEqual(done['data']['load']['outcome'], 'loaded_verified', done)
+
+    def test_first_load_is_trusted_when_the_title_appears(self):
+        self.settle.stop()
+        self.settle = patch('geck_mcp.service.RELOAD_SETTLE_SECONDS', 45)
+        self.settle.start()
+        self.transport.loaded = False
+        result = self.service.load_plugin(None, 'Garden of Eden Creation Kit', self.hash, 'first-load')
+        self.assertFalse(result['data']['reload'], result)
+        done = self.service.load_status(result['operationId'])
+        self.assertEqual(done['data']['load']['outcome'], 'loaded_verified', done)
 
 if __name__ == '__main__':
     unittest.main()

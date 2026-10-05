@@ -1,4 +1,4 @@
-# GECK MCP for New Vegas: WIP prototype (v0.1.1)
+# GECK MCP for New Vegas: WIP prototype (v0.2.0)
 
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 
@@ -10,7 +10,7 @@
 
 | Folder | MCP server | What it does | Tested |
 | --- | --- | --- | --- |
-| [`bridge/`](bridge/README.md) | `geck` (24 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
+| [`bridge/`](bridge/README.md) | `geck` (25 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
 | [`windows/`](windows/README.md) | `geck_nv` (46 tools) | **FNV port of [GECK MCP for Fallout 3](https://github.com/maksimka2432fr23/codex-skill-mcp-fallout3)** by maksimka2432fr23. Windows UI automation: launch GECK through NVSE, navigate Cell View and the Object Window, drag objects into the Render Window, load order, transactions and rollback, placed-reference patches. | ❓ Windows (not yet run against the FNV GECK) |
 
 You can run either server on its own, or both at once (their tool names don't overlap).
@@ -50,8 +50,11 @@ fights the player in game.
 
 ## Status and roadmap
 
-v0.1 is a portfolio/prototype release. Next steps: a GECK Extender pass, running the `windows/` server against the
-FNV GECK, a Linux/Proton test, DLC masters, Win32 screen capture, and one combined installer. See [CHANGELOG.md](CHANGELOG.md).
+v0.2 is a portfolio/prototype release. 0.2.0 fixed what broke while building a real mod on Windows: tools now work
+through Claude's Cowork device proxy, hidden GECK windows are restored, stale recovery barriers clear themselves after
+a GECK restart, and the Render Window can be captured on Windows. Next steps: a GECK Extender pass, running the
+`windows/` server against the FNV GECK, a Linux/Proton test, DLC masters, and one combined installer. See
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Licence and credits
 
