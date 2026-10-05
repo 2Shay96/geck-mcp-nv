@@ -39,7 +39,7 @@ fights the player in game.
 - Fallout: New Vegas and its GECK (Steam: Library → Tools). This package contains **no** game files, GECK or ESM data.
   Each user builds their own master index locally.
 - Python 3.12+ and an MCP client.
-- Optional: NVSE (for `geck_launch(via_nvse=true)`) and PyFFI (for the sprite tool).
+- Optional: NVSE (for `geck_launch(via_nvse=true)`). PyFFI for the sprite tools installs with `bridge/requirements.lock.txt`.
 
 ## Safety
 

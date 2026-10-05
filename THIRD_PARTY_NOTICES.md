@@ -8,7 +8,7 @@
 ## Python dependencies (installed by pip, not bundled)
 - MCP Python SDK (MIT), pydantic (MIT), Pillow (MIT-CMU), NumPy (BSD-3-Clause): `bridge/`
 - MCP Python SDK, pywinauto (BSD-3-Clause), psutil (BSD-3-Clause), Pillow: `windows/`
-- Optional: PyFFI (BSD-3-Clause) for `bridge/sprite_flipbook.py`
+- PyFFI (BSD-3-Clause) and setuptools (MIT) for `bridge/sprite_flipbook.py` and `bridge/tools/creature_skeleton.py`
 
 ## Not included
 - No Bethesda files: no GECK, no `.esm`/`.esp`/`.bsa` game data and no data derived from them.

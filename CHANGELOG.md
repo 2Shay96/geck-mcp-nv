@@ -35,6 +35,13 @@
   renders and reports), retried with a repaint request when it returns only the grey background; then a DPI-aware
   screen copy if no other window covers the Render Window. A flat (blank/black) result fails with `CAPTURE_BLANK`.
 - `ALCH` (aid items) added to the generic record types.
+- **Sprite tools.** `sprite_flipbook.py --collision-material organic` (a name or a number) replaces the Havok material
+  of the borrowed vanilla collision, which sets the sound when the sprite is knocked about (ported from the Salvatore
+  workshop). `sprite_flipbook.py` and `tools/creature_skeleton.py` re-run themselves with `PYTHONHASHSEED=0`, so the
+  same input gives the same NIF/KF bytes (PyFFI writes string tables in set order; two hash seeds gave two different
+  meshes). `creature_skeleton.py` finds the game Data folder from `--data`, `--project`, `$FNV_DATA` or the usual Steam
+  folder (was a hard-coded macOS path). PyFFI 2.2.3 and setuptools 84.0.0 (PyFFI imports distutils, removed in
+  Python 3.12) are in `requirements.lock.txt`, so the sprite tests run in CI.
 - Unit tests pass on Windows (fixtures no longer assume POSIX/CrossOver paths; Wine launcher tests skip on Windows);
   CI runs them on windows-latest too.
 

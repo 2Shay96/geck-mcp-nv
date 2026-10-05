@@ -4,7 +4,7 @@ What has been run, where, and what happened. Newest first.
 
 ## 2026-10-05: 0.2.0 fixes, Windows 11, native launcher
 
-Same Shadow cloud PC as 3 Oct (display scaled 200%). Branch `bridge-fixes`. Runner jobs `.claude-runner\done\046`-`056`.
+Same Shadow cloud PC as 3 Oct (display scaled 200%). Branch `bridge-fixes`. Runner jobs `.claude-runner\done\046`-`063`.
 Live tests used only throwaway plugins: `HelloWasteland.esp` (profile `projects/hellowasteland.json`) and a local
 acceptance plugin `HelloPreview.esp` (one STAT for the preview tools, one 5-line object script for
 `compile_scripts.py`; files in `bridge/state/acceptance/`, not shipped). Driver: `bridge/state/acceptance/acceptance.py`.
@@ -12,7 +12,7 @@ acceptance plugin `HelloPreview.esp` (one STAT for the preview tools, one 5-line
 | Check | Result | Notes |
 | --- | --- | --- |
 | Fix 3 cause | confirmed | Direct stdio client (job 047): `session_id` reaches the server. Through the Claude desktop device proxy the server received `{}` |
-| `bridge` unit tests, Windows | pass | Job 054: 161 run, 9 skipped (6 as before, 2 Wine launcher tests, 1 symlink without privilege). Linux: 161 pass, 6 skipped |
+| `bridge` unit tests, Windows | pass | Job 054: 161 run, 9 skipped (6 sprite tests without PyFFI, 2 Wine launcher tests, 1 symlink without privilege). Job 063 with PyFFI installed: 168 run, 3 skipped. Linux without PyFFI: 168 pass, 9 skipped |
 | Salvatore regression | pass | Spec at workshop HEAD: sha256 `382f249d…` (byte-identical). Current workshop spec (author field edited, uncommitted): `a5d045c3…` with the old and the new code |
 | `build_plugin.py <spec> --dry-run --state <workshop state>` | pass | Job 038 failed here with `no template dump` |
 | Helper rebuild (`build_helper.py`) | pass | Old exe kept in `bridge/state/helper-old/` |
@@ -20,6 +20,7 @@ acceptance plugin `HelloPreview.esp` (one STAT for the preview tools, one 5-line
 | Acceptance round 2 (job 053, after the GECK restart) | pass, except one capture | The first load released the killed load's barrier (`releasedStaleOperations`), then the same steps passed again |
 | MCP through the Claude desktop device proxy (server `geck-hello`, HelloWasteland profile) | pass | `geck_status` (3 windows visible, Render Window reachable); `geck_plugin_load` without a session (released the barrier left by the kill test) → `loaded_verified`; reload → `loaded_verified` only after the reload was seen; `geck_cell_verify` with `editor_session` and with none, framing `light.red` / `barrel.left`; `geck_plugin_install`, `geck_plugin_save`, `geck_recovery_acknowledge` with `editor_session` reached the server (install unchanged; save and acknowledge refused by their own guards, as expected for this profile). Proxy check: `editor_session: "999:1"` → `STALE_SESSION` (argument arrives); `session_id: "999:1"` → accepted as if absent (the proxy drops it) |
 | Render capture | pass | Jobs 054-056 and MCP: PNGs of the framed cell (floor tiles, barrel, light markers), 455x169 (PrintWindow, = the client size GECK reports) or 910x338 (screen copy at 200% scaling); 4 of 4 non-blank in job 056. Found on the way: a DPI-unaware screen copy took the wrong area (job 052); a covered Render Window gave a picture of the covering window (overlap check added); PrintWindow alternates between the rendered view and the plain grey background (retry with a repaint request added) |
+| Sprite tools (job 063, no GECK) | pass | PyFFI 2.2.3 + setuptools 84.0.0 from the lock file; 168 unit tests, 3 skipped (the 6 sprite tests now run). Vanilla `clutter\ashtray\ashtray01.nif` (material 24) as collision template: no option keeps 24, `organic` → 6, `cloth` → 1, read back from the written NIF. Same frames with hash seed 1, 2 or unset → one mesh sha; the workshop script without the re-run gave a different mesh for seeds 1 and 2, and with seed 0 the same bytes as the public one. `creature_skeleton.py --project` (mistergutsy, 40 files, 8 KFs edited): identical bytes for seeds 1 and 2 and to the workshop script. Salvatore esp regression unchanged (`382f249d…` / `a5d045c3…`) |
 | Loads without the mouse (jobs 058-061) | pass | Experiment with GECK's Data dialog (then Cancel): posted double-clicks toggle a row with the cursor elsewhere; a sent `WM_NOTIFY NM_DBLCLK` timed out. Helper changed to post-only toggles (verified, up to 3 tries). Job 061: 3 loads (HelloWasteland → HelloPreview → HelloWasteland) all `loaded_verified`, every toggle on the first try, while 2Shay used the mouse (214 distinct cursor positions in 641 samples) |
 
 Not run: Linux/Proton; macOS + CrossOver with this version; `windows/` server; GECK Extender. The new windows-latest

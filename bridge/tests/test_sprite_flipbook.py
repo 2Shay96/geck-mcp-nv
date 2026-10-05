@@ -3,7 +3,11 @@
 Needs Pillow and PyFFI; skipped where they are not importable (e.g. the Mac venv, whose vendored
 Pillow is built for /usr/bin/python3 3.9 — run there with `/usr/bin/python3 -m unittest`).
 """
+import hashlib
+import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,6 +23,33 @@ except Exception as error:                     # pragma: no cover - environment 
     SKIP = str(error)
 else:
     SKIP = ''
+
+
+def collision_template(path, material=3):
+    """A small clutter-style NIF: root -> bhkCollisionObject -> bhkRigidBody -> bhkConvexVerticesShape."""
+    data = N.Data(version=0x14020007, user_version=11, user_version_2=34)
+    data.header.endian_type = 1
+    root = N.BSFadeNode()
+    root.name = b'Template'
+    root.flags = 14
+    bsx = N.BSXFlags()
+    bsx.name = b'BSX'
+    bsx.integer_data = 2                                   # Havok
+    root.add_extra_data(bsx)
+    shape = N.bhkConvexVerticesShape()
+    shape.radius = 0.1
+    sf._set_shape_material(shape, material)
+    body = N.bhkRigidBody()
+    body.shape = shape
+    body.mass = 2.0
+    collision = N.bhkCollisionObject()
+    collision.body = body
+    collision.target = root
+    root.collision_object = collision
+    data.roots = [root]
+    with open(path, 'wb') as stream:
+        data.write(stream)
+    return path
 
 
 def frames(count=6, size=200):
@@ -143,6 +174,64 @@ class FlipbookTests(unittest.TestCase):
                                  billboard=False)
         self.assertNotIn('NiBillboardNode', kinds)
         self.assertEqual((kinds['NiNode'], kinds['NiVisController']), (8, 6))
+
+
+    def test_havok_material_names(self):
+        self.assertEqual(sf.havok_material('organic'), 6)
+        self.assertEqual(sf.havok_material('Cloth'), 1)
+        self.assertEqual(sf.havok_material('7'), 7)
+        self.assertEqual(sf.havok_material(24), 24)
+        with self.assertRaises(ValueError):
+            sf.havok_material('jelly')
+
+    def test_collision_material_keeps_or_replaces_the_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template = collision_template(Path(tmp) / 'template.nif', material=sf.havok_material('glass'))
+            self.assertEqual(sf.collision_material(template), 3)
+            layout = sf.plan_layout(6, (0, 0, 100, 160), 512)
+            for material, expected in ((None, 3), (sf.havok_material('organic'), 6)):
+                path = Path(tmp) / ('m%s.nif' % material)
+                kinds = sf.build_nif(path, 6, 24, layout, (-20.0, 20.0, 0.0, 64.0), 'textures\\x.dds',
+                                     animation='uv', collision=(str(template), (12.0, 8.0, 10.0), material))
+                self.assertEqual((kinds['bhkCollisionObject'], kinds['bhkConvexVerticesShape']), (1, 1))
+                self.assertEqual(sf.collision_material(path), expected)
+                data = N.Data()
+                with open(path, 'rb') as stream:
+                    data.read(stream)
+                root = data.roots[0]
+                shape = root.collision_object.body.shape
+                xs = sorted({round(v.x * 7, 4) for v in shape.vertices})
+                ys = sorted({round(v.y * 7, 4) for v in shape.vertices})
+                zs = sorted({round(v.z * 7, 4) for v in shape.vertices})
+                self.assertEqual((len(shape.vertices), xs, ys, zs), (8, [-12.0, 12.0], [-8.0, 8.0], [0.0, 10.0]))
+                bsx = [e for e in root.get_extra_datas() if isinstance(e, N.BSXFlags)]
+                self.assertEqual([e.integer_data for e in bsx], [3])        # Animated | Havok
+            without = Path(tmp) / 'none.nif'
+            sf.build_nif(without, 6, 24, layout, (-20.0, 20.0, 0.0, 64.0), 'textures\\x.dds', animation='uv')
+            self.assertIsNone(sf.collision_material(without))
+
+    def test_cli_output_does_not_depend_on_the_callers_hash_seed(self):
+        # PyFFI writes the string table in set order; the script re-runs itself with PYTHONHASHSEED=0.
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / 'frames'
+            source.mkdir()
+            for i, im in enumerate(frames(4)):
+                im.save(source / ('f%02d.png' % i))
+            template = collision_template(Path(tmp) / 'template.nif')
+            hashes = []
+            for seed in ('1', '2', 'random'):
+                out = Path(tmp) / ('out' + seed)
+                done = subprocess.run([sys.executable, str(ROOT / 'sprite_flipbook.py'), '--frames', str(source),
+                                       '--out', str(out), '--name', 'test/flip', '--max-side', '256',
+                                       '--collision-template', str(template), '--collision-material', 'organic'],
+                                      capture_output=True, text=True, env=dict(os.environ, PYTHONHASHSEED=seed))
+                self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+                manifest = json.loads((out / 'meshes' / 'test' / 'flip.manifest.json').read_text())
+                mesh = (out / 'meshes' / 'test' / 'flip.nif').read_bytes()
+                self.assertEqual(manifest['meshSha256'], hashlib.sha256(mesh).hexdigest())
+                self.assertEqual(manifest['collisionMaterial'], 6)
+                hashes.append((manifest['meshSha256'], manifest['textureSha256']))
+            self.assertEqual(len(set(hashes)), 1, hashes)
 
 
 if __name__ == '__main__':

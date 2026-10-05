@@ -69,7 +69,9 @@ Tools that act on the running GECK take an optional `editor_session`; leave it o
 The same jobs are available from the command line: `build_plugin.py` (`--project` uses the profile's state and build
 folders), `install_plugin.py`, `live_load.py` (`--if-needed`), `cell_verify.py`, `compile_scripts.py` (build, then load in
 GECK, compile every script, save and cache the compiled bytecode), `recover.py` (list or clear recovery barriers),
-`photo_cli.py`, and `sprite_flipbook.py` (an animated sprite billboard NIF from PNG frames; needs PyFFI).
+`photo_cli.py`, `sprite_flipbook.py` (an animated sprite billboard NIF from PNG frames; `--collision-material organic`
+sets the sound when it is knocked about) and `tools/creature_skeleton.py` (a creature's own skeleton and animations;
+`--project` finds the game Data folder). Both use PyFFI from the lock file and write the same bytes for the same input.
 
 ## Safety built in
 

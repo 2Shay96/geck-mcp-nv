@@ -1,7 +1,7 @@
 """Give a creature its own skeleton + animation folder, copied from a vanilla creature, so its
 animations can be changed without touching the vanilla creature (and other mods that use it).
 
-    /usr/bin/python3 tools/creature_skeleton.py --source creatures\\mistergutsy --name SalvatoreGanacci \
+    python tools/creature_skeleton.py --source creatures\\mistergutsy --name SalvatoreGanacci \
         --replace-sound NPCRobotMrHandyAttackSaw=FXSwingMedium --hit-sound WPNPowerFistFire3D \
         --body build/salvmod/meshes/creatures/mistergutsy/salvatorebody.nif --out build/salvmod
 
@@ -15,12 +15,18 @@ Text-key edits:
   --replace-sound OLD=NEW   change "Sound: OLD" keys to "Sound: NEW" (NEW may be "-" to delete the key)
   --hit-sound SOUN          add "Sound: SOUN" at each "Hit" key of attack animations
   --speed GROUP=MULT        scale the timing of animations whose file name contains GROUP (e.g. attack=3)
+
+Game Data folder: --data, else the --project profile's game_root/Data, else $FNV_DATA, else the usual Steam
+folder for this OS. Needs PyFFI 2.2.3 + setuptools (requirements.lock.txt). Re-runs itself with
+PYTHONHASHSEED=0 so rewritten KFs are byte-identical between runs (PyFFI writes string tables in set order).
 """
 import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -31,9 +37,17 @@ for vendor in (ROOT.parent / 'vendor',):
     if vendor.exists():
         sys.path.insert(0, str(vendor))
 from geck_mcp.esp.assets import bsa_extract, bsa_names  # noqa: E402
+from esm_index import default_data  # noqa: E402
 
-DATA = Path.home() / ('Library/Application Support/CrossOver/Bottles/Steam/drive_c/'
-                      'Program Files (x86)/Steam/steamapps/common/Fallout New Vegas/Data')
+
+def data_folder(data=None, project=None):
+    """--data, else the profile's game_root/Data, else $FNV_DATA or this OS's usual Steam folder."""
+    if data:
+        return Path(data)
+    if project:
+        from geck_mcp.config import Project
+        return Project.load(project).game_root / 'Data'
+    return default_data()
 
 
 def sha(b):
@@ -94,6 +108,8 @@ def check_roundtrip(raw):
 
 
 def main():
+    if os.environ.get('PYTHONHASHSEED') != '0':      # byte-identical KFs between runs
+        raise SystemExit(subprocess.call([sys.executable, *sys.argv], env=dict(os.environ, PYTHONHASHSEED='0')))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--source', required=True, help='vanilla folder under meshes, e.g. creatures\\mistergutsy')
     ap.add_argument('--name', required=True, help='new folder name under meshes\\creatures')
@@ -102,8 +118,12 @@ def main():
     ap.add_argument('--hit-sound')
     ap.add_argument('--speed', action='append', default=[])
     ap.add_argument('--body', action='append', default=[], type=Path)
-    ap.add_argument('--data', type=Path, default=DATA)
+    ap.add_argument('--data', type=Path, help='game Data folder (default: --project, $FNV_DATA or the Steam folder)')
+    ap.add_argument('--project', type=Path, help='project profile whose game_root holds the Data folder')
     args = ap.parse_args()
+    args.data = data_folder(args.data, args.project)
+    if not args.data.is_dir():
+        raise SystemExit('Data folder not found: %s (use --data, --project or FNV_DATA)' % args.data)
     replace = dict(r.split('=', 1) for r in args.replace_sound)
     speeds = [(g.split('=', 1)[0].lower(), float(g.split('=', 1)[1])) for g in args.speed]
     prefix = ('meshes\\' + args.source.strip('\\') + '\\').lower()

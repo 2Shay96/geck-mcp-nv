@@ -11,20 +11,24 @@ Writes <out>/textures/<name>.dds and <out>/meshes/<name>.nif. Design, from vanil
     their first evaluation, whatever the setup (billboard or not, STAT or MSTT, managed or free).
   * Orientation: an NiBillboardNode in mode 5 (BSROTATE_ABOUT_UP) with a vertical quad in the
     local XZ plane whose front face points -Y: exactly vanilla's fire sprites
-    (effects\fxfiremeshsmall.nif). It turns only about the vertical axis, so it stays upright.
+    (effects\\fxfiremeshsmall.nif). It turns only about the vertical axis, so it stays upright.
     Mode 0 (ALWAYS_FACE_CAMERA) with an XY quad showed up sideways in-game.
   * Texture: alpha-weighted (premultiplied) resizing, colour bleeding into transparent texels,
     and a full DXT5 mipmap chain, so block compression and minification do not create coloured
     speckles or shimmering fringes around the silhouette.
-Requires Pillow and PyFFI (vendored in work/vendor).
+Requires Pillow, PyFFI 2.2.3 and setuptools (PyFFI imports distutils, which Python 3.12 removed); all three
+are in requirements.lock.txt. The script re-runs itself with PYTHONHASHSEED=0: PyFFI writes the NIF string
+table in set order, so without a fixed hash seed the same frames give different (equally valid) NIF bytes.
 """
 import argparse
 import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import struct
+import subprocess
 import sys
 import time
 
@@ -244,13 +248,64 @@ UV_SIGN = (-1.0, 1.0)  # (u, v) signs of the texture translation, confirmed in-g
                        # cells, (-u, -v) played frames in the wrong order.
 
 
-def box_collision(root, template_path, box):
+def reproducible_hash_seed():
+    """Re-run this script with PYTHONHASHSEED=0 unless it already is (byte-identical NIFs for the same input)."""
+    if os.environ.get('PYTHONHASHSEED') == '0':
+        return
+    raise SystemExit(subprocess.call([sys.executable, *sys.argv], env=dict(os.environ, PYTHONHASHSEED='0')))
+
+
+# Fallout 3 / NV Havok materials (nif.xml "Fallout3HavokMaterial"): the shape's material picks the impact
+# and scrape sounds. The vanilla ashtray template is glass-like; a sprite character wants something soft.
+HAVOK_MATERIALS = {'stone': 0, 'cloth': 1, 'dirt': 2, 'glass': 3, 'grass': 4, 'metal': 5, 'organic': 6, 'skin': 7,
+                   'water': 8, 'wood': 9, 'bottle': 24, 'rubber_ball': 31}
+
+
+def havok_material(value):
+    """'organic' / 'ORGANIC' / '6' / 6 -> 6. Raises ValueError for unknown names."""
+    if isinstance(value, int):
+        return value
+    text = str(value).strip().lower()
+    if text.isdigit():
+        return int(text)
+    if text not in HAVOK_MATERIALS:
+        raise ValueError('unknown Havok material %r (one of %s or a number)' % (value, ', '.join(HAVOK_MATERIALS)))
+    return HAVOK_MATERIALS[text]
+
+
+def _set_shape_material(shape, material):
+    """PyFFI 2.2.3 stores the shape material as a HavokMaterial struct (.material) or a bare enum."""
+    holder = shape.material
+    if hasattr(holder, 'material'):
+        holder.material = material
+        return int(holder.material)
+    shape.material = material
+    return int(shape.material)
+
+
+def _get_shape_material(shape):
+    holder = shape.material
+    return int(holder.material) if hasattr(holder, 'material') else int(holder)
+
+
+def collision_material(path):
+    """Havok material of a NIF's root collision shape, read back from disk (None without collision)."""
+    from pyffi.formats.nif import NifFormat as N
+    data = N.Data()
+    with open(path, 'rb') as stream:
+        data.read(stream)
+    collision = data.roots[0].collision_object
+    return None if collision is None else _get_shape_material(collision.body.shape)
+
+
+def box_collision(root, template_path, box, material=None):
     """Give `root` the Havok collision of a vanilla clutter NIF, resized to a box.
 
     template_path: a vanilla NIF whose root has bhkCollisionObject -> bhkRigidBody ->
     bhkConvexVerticesShape (e.g. clutter\\ashtray\\ashtray01.nif). box = (half_x, half_y, height)
     in game units, standing on z=0. Havok units are game units / 7 (FNV). Returns the template root's
-    extra data list so its BSX (Havok) flags and UPB can be merged.
+    extra data list so its BSX (Havok) flags and UPB can be merged. material (Havok material number, see
+    HAVOK_MATERIALS) replaces the template's, which sets the sound when the object is knocked about.
     """
     from pyffi.formats.nif import NifFormat as N
     tpl = N.Data()
@@ -282,6 +337,8 @@ def box_collision(root, template_path, box):
         if hasattr(inertia, name):
             setattr(inertia, name, 0.0)
     inertia.m_11, inertia.m_22, inertia.m_33 = ixx, iyy, izz
+    if material is not None:
+        _set_shape_material(shape, material)
     collision.target = root
     root.collision_object = collision
     return [e for e in troot.get_extra_datas()]
@@ -313,7 +370,7 @@ def build_nif(path, count, fps, layout, quad, texture_rel, billboard_mode=5, roo
     bsx.integer_data = 1                                  # Animated
     if collision:
         # Havok body from a vanilla clutter mesh; merge its BSX flags (Havok) and UPB string.
-        for extra in box_collision(root, collision[0], collision[1]):
+        for extra in box_collision(root, collision[0], collision[1], collision[2] if len(collision) > 2 else None):
             if isinstance(extra, N.BSXFlags):
                 bsx.integer_data |= extra.integer_data
             elif isinstance(extra, N.NiStringExtraData):
@@ -543,6 +600,7 @@ def build_nif(path, count, fps, layout, quad, texture_rel, billboard_mode=5, roo
 
 
 def main():
+    reproducible_hash_seed()
     parser = argparse.ArgumentParser()
     parser.add_argument('--frames', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True, help='a Data-shaped folder (meshes/, textures/)')
@@ -561,6 +619,8 @@ def main():
     parser.add_argument('--offset-z', type=float, default=0.0, help='raise/lower the sprite (game units)')
     parser.add_argument('--collision-template', help='vanilla clutter NIF to borrow Havok collision from')
     parser.add_argument('--collision-box', default='12,12,10', help='collision box half-x,half-y,height')
+    parser.add_argument('--collision-material', help='Havok material name or number (e.g. organic, cloth); '
+                        'default: keep the template\'s')
     parser.add_argument('--tint', help='r,g,b in 0..1 material colour, e.g. 1,0.3,0.3')
     parser.add_argument('--reuse-texture', help='existing texture name (e.g. salvatore/salvatore_anim) '
                         'built from the same frames and --max-side; skips building a DDS')
@@ -594,7 +654,8 @@ def main():
                       args.billboard_mode, args.root_name.encode('ascii'), args.animation,
                       not args.no_billboard, tint, tuple(float(v) for v in args.uv_sign.split(',')),
                       args.prn, args.offset_z,
-                      (args.collision_template, tuple(float(v) for v in args.collision_box.split(',')))
+                      (args.collision_template, tuple(float(v) for v in args.collision_box.split(',')),
+                       havok_material(args.collision_material) if args.collision_material else None)
                       if args.collision_template else None)
     bounds = [math.floor(min(quad[0], -quad[1])), math.floor(min(quad[0], -quad[1])), 0,
               math.ceil(max(-quad[0], quad[1])), math.ceil(max(-quad[0], quad[1])), math.ceil(quad[3])]
@@ -603,6 +664,7 @@ def main():
                 'suggestedBounds': bounds, 'dds': dds, 'blocks': kinds, 'billboard': not args.no_billboard,
                 'billboardMode': args.billboard_mode, 'animation': args.animation, 'tint': tint, 'uvSign': args.uv_sign,
                 'texture': str(texture), 'mesh': str(mesh),
+                'collisionMaterial': collision_material(mesh) if args.collision_template else None,
                 'textureSha256': hashlib.sha256(texture.read_bytes()).hexdigest() if texture.exists() else None,
                 'meshSha256': hashlib.sha256(mesh.read_bytes()).hexdigest(),
                 'sourceSha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}}
