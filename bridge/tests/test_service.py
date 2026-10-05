@@ -477,7 +477,6 @@ class ServiceTests(unittest.TestCase):
         result = self.load('load-toggle')
         self.assertEqual(result['outcome'], 'failed_before_change', result)
         self.assertIn('nothing loaded', result['error']['message'])
-        self.assertIn('mouse', result['error']['message'])
         self.assertIn('data.cancel', self.transport.calls)
         self.assertTrue(self.service.attach(None)['ok'])
 

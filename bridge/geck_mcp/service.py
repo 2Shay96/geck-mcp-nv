@@ -462,9 +462,7 @@ class Service:
             error.evidence = {'load': error.evidence, 'cancel': str(cancel_error)}
             return                      # dialog state unknown: keep the barrier
         self._mutation_dispatched = False
-        hint = (' (GECK hit-tests the real mouse cursor in the Data list: keep the desktop unlocked and the '
-                'mouse still while loading)' if 'toggle' in str(error) or 'cursor' in str(error) else '')
-        error.args = (str(error) + '; Data dialog cancelled, nothing loaded' + hint,)
+        error.args = (str(error) + '; Data dialog cancelled, nothing loaded',)
 
     def load_status(self, operation_id):
         def action():

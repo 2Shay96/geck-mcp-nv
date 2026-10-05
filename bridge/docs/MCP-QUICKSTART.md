@@ -77,7 +77,7 @@ python recover.py --project projects/my_mod.json --release-stale   # release bar
 python recover.py --project projects/my_mod.json --ack <id> --note "what you checked"   # add --offline if GECK is not running
 ```
 
-A load whose Data dialog step fails before OK (for example a checkbox that does not toggle because the desktop is locked or the mouse moved) cancels the dialog and reports `failed_before_change`, so it leaves no barrier.
+A load whose Data dialog step fails before OK (for example a checkbox that does not toggle) cancels the dialog and reports `failed_before_change`, so it leaves no barrier.
 
 The lock coordinates cooperating bridge callers; it cannot prevent manual edits. Existing record dialogs block automated workflows. The bridge checks session, plugin, configured record identity and expected values, but live identity is currently established by the disk FormID plus the exact EditorID in a scoped Static dialog. Full live provenance/load-order verification remains future work.
 
@@ -98,5 +98,5 @@ Pending loads block other editor workflows while status and inspection remain av
 
 GECK can take several minutes to load the master in this bottle. Transient control timeouts during loading are not evidence of a missing plugin or a corrupt mesh. Recheck status after loading; do not repeat mutations on timeout.
 
-On native Windows the Data list checkboxes are toggled with posted clicks at the parked real cursor, so keep the desktop unlocked and do not move the mouse while a load is being dispatched (a few seconds).
+On native Windows the Data list checkboxes are toggled with posted double-clicks; the real mouse cursor is not used, so you can keep working while the bridge loads a plugin (just don't click inside GECK). Each toggle is read back and retried up to 3 times.
 

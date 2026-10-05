@@ -17,8 +17,12 @@
 - **Stale recovery barriers are released.** An uncertain operation from an earlier GECK session (GECK closed, crashed or
   killed, then restarted) no longer blocks editor work: the next editor call marks it `stale` and reports it under
   `releasedStaleOperations`. New CLI `recover.py --list / --release-stale / --ack ID --note ... [--offline]`.
-- **Failed loads clean up.** If the Data dialog step fails before OK (e.g. a checkbox that does not toggle because the
-  desktop is locked or the mouse moved), the dialog is cancelled and the load is `failed_before_change` (no barrier).
+- **Loads no longer use the mouse.** 0.1.1 parked the real cursor over each Data list row for up to 2 s, so a load
+  failed when the user moved the mouse or was away. Posted double-clicks toggle the rows without the cursor (tested
+  with the cursor elsewhere and while the mouse was in use); each toggle is read back and retried up to 3 times.
+- **Failed loads clean up.** If the Data dialog step fails before OK (e.g. a checkbox that does not toggle), the dialog
+  is cancelled and the load is `failed_before_change` (no barrier). `data.state` and `data.cancel` no longer need a
+  dummy argument in the helper.
 - **Reload completion.** Reloading the plugin GECK already shows was reported done before GECK even started reloading
   (the title names the plugin before and after). A reload is now done only after the reload was seen, or after 45 s.
 - **Templates and indexes follow the profile.** Record templates and master indexes are read from the profile's
