@@ -1,5 +1,7 @@
 # GECK MCP for New Vegas: WIP prototype (v0.2.1)
 
+Download: [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files).
+
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 
 > ⚠️ **Work-in-progress prototype.** The `geck` bridge is tested end to end on **Windows 11** with the vanilla
