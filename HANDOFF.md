@@ -13,8 +13,9 @@ The detailed history is `..\BRIDGE-FIXES.md`. Its 6 October status supersedes ol
 Fix 7: the game console does not resolve bridge-built plugin forms, although scripts and actor selection work. First compare a GECK-saved copy with the corresponding bridge-built copy, then perform a controlled game test with 2Shay. Verify actual quest IDs and load index rather than copying historical commands. The old notes mention Salvatore v1.1; that is mod scheduling, not a restriction on bridge work.
 
 Fix 9: migration implemented and tested in `_worktrees/geck-workshop--codex--bridge-dependency`. Public prerequisite
-PR #2 (bridge 0.2.1 static collision support) is merged; private workshop PR #1 targets windows-pc. The active mod
-agent's checkout remains untouched per 2Shay's instruction. Adopt the private migration after that agent releases it.
+PR #2 (bridge 0.2.1 static collision support) and private workshop PR #1 are both merged. On 6 October, 2Shay
+confirmed all agents had finished and authorized local adoption. The active workshop windows-pc checkout now uses
+the public bridge; its six pre-existing uncommitted mod files remain byte-identical and uncommitted. Fix 9 complete.
 
 ## Boundaries
 

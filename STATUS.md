@@ -30,4 +30,12 @@ Public prerequisite PR #2 merged after all four pull-request CI jobs passed (Ubu
 port). Private migration PR #1 is open against windows-pc. 2Shay confirmed the mod agent is still running and explicitly
 instructed that its checkout remain untouched; no private merge/adoption occurred.
 
-Next action: apply private PR #1 when the mod agent releases its primary checkout.
+## Fix 9 adopted — 6 October 2026
+
+2Shay confirmed the other agents had finished and explicitly requested the merge. Private PR #1 merged at `1f5d3a7`
+after latest PR CI passed, then the primary workshop windows-pc checkout fast-forwarded successfully. All six prior
+uncommitted mod files are preserved byte-for-byte and remain uncommitted. Backup is workshop
+`_to_delete/bridge-before-fix9-primary`. Post-adoption 13 workshop tests passed; current delegated build dry-run
+reproduces `c8fa39d0...`. The canonical public bridge is now used by the active workshop. Fix 9 complete.
+
+Next action: final HelloWasteland MCP acceptance cycle, using the existing procedures in docs/TESTING.md.
