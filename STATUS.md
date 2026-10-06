@@ -51,3 +51,21 @@ and game plugins.txt hashes are unchanged. The throwaway ESP was moved from Data
 remains open, clean, with HelloWasteland loaded; the mod agent can now use it. Full results and limits: docs/TESTING.md.
 
 Next action: complete for the tested native Windows bridge workflow. Nexus/release packaging was not requested.
+
+## Nexus 0.2.1 update — 6 October 2026
+
+2Shay requested the Nexus update. Source-only ZIP from pushed source commit
+`a69dc8e66f84838d1537830bbb94c91ec54231f7` passed extraction, helper compilation and distribution tests:
+bridge 169 passed / 3 skipped, ESP verifier 6 passed, Windows port 23 passed. ZIP SHA-256:
+`cbd49f262cd654cec2be2037fd63d6cab7c02624e802c56a1adf271dc9855fb7`.
+
+Uploaded as the primary 0.2.1 update on existing Nexus mod 99851, file ID 1000182689. Old 0.1.1 is retained under
+Old files. Public mod version is 0.2.1; title is now GECK MCP for New Vegas (removed WIP at 2Shay's request).
+Updated description covers 25 bridge tools, setup and verified Windows workflow with platform limits.
+Nexus initially reports virus scanning in progress and temporarily blocks the new download.
+
+Direct Files editor URL returned 403, even after login refresh; opening General then navigating to Files within
+the editor worked. Chrome extension needed user-enabled access to file URLs for the upload. No game/mod sources changed.
+
+Next action: verify Nexus scan completion and availability of the new download. Release kit and screenshots live
+outside Git in the parent nexus folder; no archive/binary/test evidence committed.
