@@ -2,6 +2,23 @@
 
 What has been run, where, and what happened. Newest first.
 
+## 2026-10-06: Codex bridge takeover and console diagnosis
+
+Shadow Windows PC; branch `codex/bridge-console-fix`, baseline `fdaf790`.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Bridge unit suite | pass | 168 tests run, 3 skipped |
+| ESP verifier suite | pass | 6 tests run |
+| Salvatore profile dry-run | pass | Validates and matches installed Build C SHA-256 `6e3375186e2f46894e8d5eae45519e0292a62908592316e844d82cbb74349cde`; no files installed |
+| GECK status through Codex MCP | pass | Direct `geck_status`: no unsaved changes, Object Window/Cell View/Render Window visible and reachable |
+| Installed plugin inspection through MCP | pass | `geck_plugin_inspect(which="installed")`: generated, installed hash matches build |
+| Runtime actor ID | user verified | 2Shay clicked Salvatore: `0A000813`; plugin contains ACRE `01000813` |
+| Main quest console lookup | user verified pass | `sqv 0A00080F` shows quest variables using the unchanged bridge-built plugin. Earlier commands used wrong runtime prefix 01 |
+| Corrected summon command | pending | `startquest 0A000818` requested; result not yet received |
+
+No GECK edits, plugin swaps, writer changes or new full live acceptance run in this session.
+
 ## 2026-10-05: 0.2.0 fixes, Windows 11, native launcher
 
 Same Shadow cloud PC as 3 Oct (display scaled 200%). Branch `bridge-fixes`. Runner jobs `.claude-runner\done\046`-`063`.

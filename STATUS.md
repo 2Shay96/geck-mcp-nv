@@ -8,6 +8,8 @@ Created `HANDOFF.md` and `MCPworkflow.md` from the recovered notes and current u
 
 Initial comparison: backup `5a3f7fbf...` versus bridge build backup `382f249d...` has identical quest EDIDs and record headers, but different main-quest DATA flags, HEDR next-object-ID, and several creature fields. The same differences appear between GECK-saved backup `17222cef...` and current Build C. All four QUST records are present under the correct QUST top group in every inspected copy: main quest `0100080F`, summon `01000818`, far `01000819`, reset `0100081A`. Their record headers use flags 0 and form version 15. This does not establish the cause. Details and runtime test sequence: `docs/CONSOLE-DIAGNOSIS.md`.
 
-GECK is open with a bare title; FalloutNV was not running at inspection. Private workshop sources and installed plugin have not been changed.
+Direct MCP verification: `geck_status` succeeded against the running GECK (PID 19108), with no unsaved changes and Object Window, Cell View and Render Window all visible/reachable. `geck_plugin_inspect(which="installed")` succeeded and confirmed the installed Build C hash and match to build. Private workshop sources and installed plugin have not been changed.
 
-Next action: obtain 2Shay's runtime console reference ID and current `sqv` result before preparing a plugin swap. An asynchronous question is pending; do not swap the installed mod while the game is running.
+Runtime result: 2Shay reported clicked reference `0A000813` and confirmed `sqv 0A00080F` shows quest variables with the unchanged bridge-built plugin. The historical prefix 01 was incorrect for this running load order. Main-quest lookup is resolved without writer changes. Updated `bridge/README.md` with file-local versus runtime FormID guidance.
+
+Next action: obtain the pending `startquest 0A000818` result to close the original summon failure, then push this checked diagnosis milestone.

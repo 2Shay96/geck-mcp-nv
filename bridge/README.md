@@ -73,6 +73,18 @@ GECK, compile every script, save and cache the compiled bytecode), `recover.py` 
 sets the sound when it is knocked about) and `tools/creature_skeleton.py` (a creature's own skeleton and animations;
 `--project` finds the game Data folder). Both use PyFFI from the lock file and write the same bytes for the same input.
 
+## FormIDs in the game console
+
+Build receipts and plugin inspection show **file-local FormIDs**, not the game's current load order. A plugin with
+one master commonly stores its own records with prefix `01`. In the game, replace that prefix with the plugin's
+actual runtime load index. For example, file ID `0100080F` becomes `0A00080F` when the plugin loads at index `0A`.
+Do not change the plugin's stored IDs to match a particular player's load order.
+
+For a placed reference belonging to the plugin, its ID when clicked in the game console can establish the runtime
+prefix. A dynamically created reference beginning with `FF` cannot. A short `plugins.txt` alone does not establish
+the index used by the running game. Verify the runtime prefix before diagnosing a writer failure from “Invalid info”
+or a quest lookup error. EditorIDs may also be unavailable in the vanilla game console; use the verified numeric ID.
+
 ## Safety built in
 
 - Every edit uses a request key. Repeats are refused or replayed, never run twice.

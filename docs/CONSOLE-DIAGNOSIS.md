@@ -1,6 +1,7 @@
 # Fix 7: game console form resolution
 
-6 October 2026. Investigation in progress; no cause or implementation fix confirmed.
+6 October 2026. Main-quest failure resolved: the historical console commands used the wrong runtime load index.
+The original summon command is awaiting its final user check. No plugin writer change is necessary for the verified quest lookup.
 
 ## Evidence
 
@@ -28,7 +29,17 @@ Older GECK-saved backup `5a3f7fbf...` versus bridge backup `382f249d...` shows t
 
 Commands run from public `bridge`: `tools/esp_diff.py <saved-backup> <bridge-build>`, plus read-only iteration with `geck_mcp.esp.codec.iter_records`. Private workshop sources and game installation were not modified.
 
-## Next runtime checks
+## Runtime result
+
+2Shay reported Salvatore's clicked in-game reference as `0A000813`. The matching plugin reference is `01000813`, so
+the actual runtime index is 0A, not the historical assumption of 01. With the existing installed bridge-built plugin,
+2Shay confirmed that `sqv 0A00080F` shows the quest variables. This demonstrates that its main quest is loaded and
+resolves through the game console. No plugin swap or byte change was needed.
+
+The corrected summon command is `startquest 0A000818`; its user check is pending. Far and reset IDs would be
+`0A000819` and `0A00081A` for this running load order. These prefixes are not portable to other load orders.
+
+## Original diagnostic plan
 
 1. 2Shay launches the current mod and loads the usual test save. Click the existing Salvatore actor in the console and record its full reference ID. If it begins with FF, it is a dynamic reference and does not identify the mod index.
 2. With verified runtime prefix XX, test `sqv XX00080F` and record the exact result. Also test `sqv SalvatoreGanacciQuest`. Avoid changing quest state during this first check.
@@ -36,7 +47,8 @@ Commands run from public `bridge`: `tools/esp_diff.py <saved-backup> <bridge-bui
 4. Test that copy on the same clean save and runtime load index. Do not save over the player's original save. Restore the preserved current plugin when FNV is closed and verify its hash.
 5. If GECK copy succeeds while bridge copy fails, isolate the necessary byte difference and add a regression test before changing writer behavior. If both fail, investigate runtime loading/console behavior instead of changing plugin bytes speculatively.
 
-The first runtime question is pending. No plugin swap has occurred.
+Steps 1–2 established the wrong load-index assumption and a successful main-quest lookup. Steps 3–5 are unnecessary
+for that verified lookup. No plugin swap has occurred.
 
 ## References
 
