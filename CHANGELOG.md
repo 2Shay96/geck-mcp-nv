@@ -4,7 +4,7 @@
 
 - Document file-local versus runtime FormIDs for game console commands. The Salvatore main-quest lookup failure
   was resolved on the unchanged bridge-built plugin by using runtime index `0A` instead of file-local `01`;
-  `sqv 0A00080F` was verified in game by 2Shay. No plugin writer change was required.
+  `sqv 0A00080F` and `startquest 0A000818` were verified in game by 2Shay. No plugin writer change was required.
 
 ## 0.2.0: Windows fixes from the Salvatore build (2026-10-05)
 ### bridge/

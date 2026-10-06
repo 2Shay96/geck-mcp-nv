@@ -15,7 +15,7 @@ Shadow Windows PC; branch `codex/bridge-console-fix`, baseline `fdaf790`.
 | Installed plugin inspection through MCP | pass | `geck_plugin_inspect(which="installed")`: generated, installed hash matches build |
 | Runtime actor ID | user verified | 2Shay clicked Salvatore: `0A000813`; plugin contains ACRE `01000813` |
 | Main quest console lookup | user verified pass | `sqv 0A00080F` shows quest variables using the unchanged bridge-built plugin. Earlier commands used wrong runtime prefix 01 |
-| Corrected summon command | pending | `startquest 0A000818` requested; result not yet received |
+| Corrected summon command | user verified pass | `startquest 0A000818` summons Salvatore without “Invalid info” on the unchanged bridge-built plugin |
 
 No GECK edits, plugin swaps, writer changes or new full live acceptance run in this session.
 

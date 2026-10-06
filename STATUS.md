@@ -10,6 +10,8 @@ Initial comparison: backup `5a3f7fbf...` versus bridge build backup `382f249d...
 
 Direct MCP verification: `geck_status` succeeded against the running GECK (PID 19108), with no unsaved changes and Object Window, Cell View and Render Window all visible/reachable. `geck_plugin_inspect(which="installed")` succeeded and confirmed the installed Build C hash and match to build. Private workshop sources and installed plugin have not been changed.
 
-Runtime result: 2Shay reported clicked reference `0A000813` and confirmed `sqv 0A00080F` shows quest variables with the unchanged bridge-built plugin. The historical prefix 01 was incorrect for this running load order. Main-quest lookup is resolved without writer changes. Updated `bridge/README.md` with file-local versus runtime FormID guidance.
+Runtime result: 2Shay reported clicked reference `0A000813`, confirmed `sqv 0A00080F` shows quest variables, and confirmed `startquest 0A000818` summons Salvatore without the original error. The unchanged bridge-built plugin works: the historical prefix 01 was incorrect for this running load order. Fix 7's two numeric-ID failures are resolved without writer changes. Updated `bridge/README.md` with file-local versus runtime FormID guidance. Vanilla EditorID lookup and far/reset commands were not retested.
 
-Next action: obtain the pending `startquest 0A000818` result to close the original summon failure, then push this checked diagnosis milestone.
+GitHub milestone: recovered workflow and confirmed console diagnosis pushed on `codex/bridge-console-fix`, PR #2. This fix 7 milestone is complete.
+
+Next action: plan fix 9 (workshop/public code duplication) around the current private workshop workflow before changing its imports or scripts.
