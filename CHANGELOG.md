@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Bridge 0.2.1: port the workshop sprite tool's `--collision-static` option and collision motion readback so
+  the workshop can depend on this implementation without losing its unmovable defeated sprite. Fixed collision
+  uses static layer, motion system 7, fixed quality, zero mass/inertia and clears the dynamic BSX flag.
+  Existing dynamic collision behavior and deterministic hash-seed handling are preserved.
+
 - Document file-local versus runtime FormIDs for game console commands. The Salvatore main-quest lookup failure
   was resolved on the unchanged bridge-built plugin by using runtime index `0A` instead of file-local `01`;
   `sqv 0A00080F` and `startquest 0A000818` were verified in game by 2Shay. No plugin writer change was required.

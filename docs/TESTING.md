@@ -4,6 +4,12 @@ What has been run, where, and what happened. Newest first.
 
 ## 2026-10-06: Codex bridge takeover and console diagnosis
 
+Fix 9 follow-up: public suite **169 tests passed, 3 skipped**, ESP verifier **6 passed**; isolated workshop migration
+suite **13 passed**. Static Havok collision is checked by NIF readback and deterministic CLI output. Full non-install
+old/new Salvatore asset builds matched **48/48 files byte-for-byte** at seed 0. Both public/delegated current profile
+dry-runs matched `c8fa39d051cfc109405a71ed30206a292ca439f6b0509cda2cfe4d27c26174f0`. A fresh delegated
+native GECK status succeeded with isolated state. No writer changes, game writes or new live compilation/load cycle.
+
 Shadow Windows PC; branch `codex/bridge-console-fix`, baseline `fdaf790`.
 
 | Check | Result | Notes |

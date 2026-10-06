@@ -14,4 +14,17 @@ Runtime result: 2Shay reported clicked reference `0A000813`, confirmed `sqv 0A00
 
 GitHub milestone: recovered workflow and confirmed console diagnosis pushed on `codex/bridge-console-fix`, PR #2. This fix 7 milestone is complete.
 
-Next action: plan fix 9 (workshop/public code duplication) around the current private workshop workflow before changing its imports or scripts.
+## Fix 9 implementation
+
+Completed in private isolated worktree `_worktrees/geck-workshop--codex--bridge-dependency`, branch
+`codex/bridge-dependency`. Workshop core imports and 16 reusable commands now delegate to the public implementation;
+archived copies are ignored. Profiles, mod sources, caches and asset pipeline remain private. Public bridge 0.2.1
+ports the missing `--collision-static` feature, so the defeated sprite behavior is preserved.
+
+Checked: public 169 tests passed, 3 skipped; ESP verifier 6 passed; workshop 13 passed. Full old/new non-install asset
+builds at seed 0 matched all 48 files. Both current profile dry-run routes matched `c8fa39d0...`; inputs advanced with
+the mod agent's current work, so the old Build C hash is not the current baseline. Fresh delegated native GECK status
+passed using isolated state. No game installations or live script compilation performed.
+
+Next action: merge the public prerequisite, then apply the private migration when the mod agent releases its dirty
+primary checkout. User question about the mod agent's current activity is pending; its folder remains untouched.
