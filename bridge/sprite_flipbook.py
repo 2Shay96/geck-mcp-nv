@@ -288,6 +288,16 @@ def _get_shape_material(shape):
     return int(holder.material) if hasattr(holder, 'material') else int(holder)
 
 
+def collision_motion(path):
+    """Read back the root collision body's motion system (7 = fixed)."""
+    from pyffi.formats.nif import NifFormat as N
+    data = N.Data()
+    with open(path, 'rb') as stream:
+        data.read(stream)
+    collision = data.roots[0].collision_object
+    return None if collision is None else int(collision.body.motion_system)
+
+
 def collision_material(path):
     """Havok material of a NIF's root collision shape, read back from disk (None without collision)."""
     from pyffi.formats.nif import NifFormat as N
@@ -298,7 +308,7 @@ def collision_material(path):
     return None if collision is None else _get_shape_material(collision.body.shape)
 
 
-def box_collision(root, template_path, box, material=None):
+def box_collision(root, template_path, box, material=None, static=False):
     """Give `root` the Havok collision of a vanilla clutter NIF, resized to a box.
 
     template_path: a vanilla NIF whose root has bhkCollisionObject -> bhkRigidBody ->
@@ -339,6 +349,16 @@ def box_collision(root, template_path, box, material=None):
     inertia.m_11, inertia.m_22, inertia.m_33 = ixx, iyy, izz
     if material is not None:
         _set_shape_material(shape, material)
+    if static:
+        for filt in (getattr(body, 'havok_col_filter', None), getattr(body, 'havok_col_filter_copy', None)):
+            if filt is not None:
+                filt.layer = 1
+        body.motion_system = 7
+        body.quality_type = 1
+        body.deactivator_type = 1
+        body.solver_deactivation = 1
+        body.mass = 0.0
+        inertia.m_11 = inertia.m_22 = inertia.m_33 = 0.0
     collision.target = root
     root.collision_object = collision
     return [e for e in troot.get_extra_datas()]
@@ -370,9 +390,11 @@ def build_nif(path, count, fps, layout, quad, texture_rel, billboard_mode=5, roo
     bsx.integer_data = 1                                  # Animated
     if collision:
         # Havok body from a vanilla clutter mesh; merge its BSX flags (Havok) and UPB string.
-        for extra in box_collision(root, collision[0], collision[1], collision[2] if len(collision) > 2 else None):
+        static = len(collision) > 3 and bool(collision[3])
+        for extra in box_collision(root, collision[0], collision[1], collision[2] if len(collision) > 2 else None,
+                                   static):
             if isinstance(extra, N.BSXFlags):
-                bsx.integer_data |= extra.integer_data
+                bsx.integer_data |= extra.integer_data & ~64 if static else extra.integer_data
             elif isinstance(extra, N.NiStringExtraData):
                 root.add_extra_data(extra)
     root.add_extra_data(bsx)
@@ -621,6 +643,8 @@ def main():
     parser.add_argument('--collision-box', default='12,12,10', help='collision box half-x,half-y,height')
     parser.add_argument('--collision-material', help='Havok material name or number (e.g. organic, cloth); '
                         'default: keep the template\'s')
+    parser.add_argument('--collision-static', action='store_true',
+                        help='unmovable collision (static layer, fixed motion), like vanilla static activators')
     parser.add_argument('--tint', help='r,g,b in 0..1 material colour, e.g. 1,0.3,0.3')
     parser.add_argument('--reuse-texture', help='existing texture name (e.g. salvatore/salvatore_anim) '
                         'built from the same frames and --max-side; skips building a DDS')
@@ -655,7 +679,8 @@ def main():
                       not args.no_billboard, tint, tuple(float(v) for v in args.uv_sign.split(',')),
                       args.prn, args.offset_z,
                       (args.collision_template, tuple(float(v) for v in args.collision_box.split(',')),
-                       havok_material(args.collision_material) if args.collision_material else None)
+                       havok_material(args.collision_material) if args.collision_material else None,
+                       args.collision_static)
                       if args.collision_template else None)
     bounds = [math.floor(min(quad[0], -quad[1])), math.floor(min(quad[0], -quad[1])), 0,
               math.ceil(max(-quad[0], quad[1])), math.ceil(max(-quad[0], quad[1])), math.ceil(quad[3])]
@@ -665,6 +690,7 @@ def main():
                 'billboardMode': args.billboard_mode, 'animation': args.animation, 'tint': tint, 'uvSign': args.uv_sign,
                 'texture': str(texture), 'mesh': str(mesh),
                 'collisionMaterial': collision_material(mesh) if args.collision_template else None,
+                'collisionMotionSystem': collision_motion(mesh) if args.collision_template else None,
                 'textureSha256': hashlib.sha256(texture.read_bytes()).hexdigest() if texture.exists() else None,
                 'meshSha256': hashlib.sha256(mesh.read_bytes()).hexdigest(),
                 'sourceSha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}}

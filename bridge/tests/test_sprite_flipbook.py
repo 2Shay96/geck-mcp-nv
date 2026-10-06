@@ -210,6 +210,33 @@ class FlipbookTests(unittest.TestCase):
             sf.build_nif(without, 6, 24, layout, (-20.0, 20.0, 0.0, 64.0), 'textures\\x.dds', animation='uv')
             self.assertIsNone(sf.collision_material(without))
 
+    def test_static_collision_roundtrip_preserves_fixed_body_and_material(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template = collision_template(Path(tmp) / 'template.nif')
+            data = N.Data()
+            with open(template, 'rb') as stream:
+                data.read(stream)
+            bsx = next(e for e in data.roots[0].get_extra_datas() if isinstance(e, N.BSXFlags))
+            bsx.integer_data |= 64
+            with open(template, 'wb') as stream:
+                data.write(stream)
+            path = Path(tmp) / 'fixed.nif'
+            layout = sf.plan_layout(6, (0, 0, 100, 160), 512)
+            sf.build_nif(path, 6, 24, layout, (-20.0, 20.0, 0.0, 64.0), 'textures\\x.dds',
+                         animation='uv', collision=(template, (12, 8, 10), 6, True))
+            with open(path, 'rb') as stream:
+                data.read(stream)
+            root = data.roots[0]
+            body = root.collision_object.body
+            self.assertEqual(sf.collision_motion(path), 7)
+            self.assertEqual(sf.collision_material(path), 6)
+            self.assertEqual((int(body.quality_type), body.mass), (1, 0.0))
+            self.assertEqual((int(body.havok_col_filter.layer), int(body.havok_col_filter_copy.layer)), (1, 1))
+            self.assertEqual((body.inertia.m_11, body.inertia.m_22, body.inertia.m_33), (0.0, 0.0, 0.0))
+            bsx = next(e for e in root.get_extra_datas() if isinstance(e, N.BSXFlags))
+            self.assertEqual(bsx.integer_data & 64, 0)
+            self.assertEqual(bsx.integer_data & 3, 3)
+
     def test_cli_output_does_not_depend_on_the_callers_hash_seed(self):
         # PyFFI writes the string table in set order; the script re-runs itself with PYTHONHASHSEED=0.
         with tempfile.TemporaryDirectory() as tmp:
@@ -223,7 +250,8 @@ class FlipbookTests(unittest.TestCase):
                 out = Path(tmp) / ('out' + seed)
                 done = subprocess.run([sys.executable, str(ROOT / 'sprite_flipbook.py'), '--frames', str(source),
                                        '--out', str(out), '--name', 'test/flip', '--max-side', '256',
-                                       '--collision-template', str(template), '--collision-material', 'organic'],
+                                       '--collision-template', str(template), '--collision-material', 'organic',
+                                       '--collision-static'],
                                       capture_output=True, text=True, env=dict(os.environ, PYTHONHASHSEED=seed))
                 self.assertEqual(done.returncode, 0, done.stderr[-2000:])
                 manifest = json.loads((out / 'meshes' / 'test' / 'flip.manifest.json').read_text())
