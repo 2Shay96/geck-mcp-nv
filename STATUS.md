@@ -26,5 +26,8 @@ builds at seed 0 matched all 48 files. Both current profile dry-run routes match
 the mod agent's current work, so the old Build C hash is not the current baseline. Fresh delegated native GECK status
 passed using isolated state. No game installations or live script compilation performed.
 
-Next action: merge the public prerequisite, then apply the private migration when the mod agent releases its dirty
-primary checkout. User question about the mod agent's current activity is pending; its folder remains untouched.
+Public prerequisite PR #2 merged after all four pull-request CI jobs passed (Ubuntu, macOS, Windows bridge and Windows
+port). Private migration PR #1 is open against windows-pc. 2Shay confirmed the mod agent is still running and explicitly
+instructed that its checkout remain untouched; no private merge/adoption occurred.
+
+Next action: apply private PR #1 when the mod agent releases its primary checkout.
