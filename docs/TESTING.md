@@ -2,6 +2,35 @@
 
 What has been run, where, and what happened. Newest first.
 
+## 2026-10-06: final live native MCP acceptance, bridge 0.2.1
+
+Shadow Windows PC, vanilla Steam GECK, native launcher, public main `3d9dcf4` at test start. No bridge code changed
+in this session. Used the registered Codex `geck-hello` tools for HelloWasteland and a fresh stdio MCP client for an
+isolated throwaway `HelloAcceptanceFinal.esp` (one STAT and one object script from the existing HelloPreview fixture).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Status, validate, build, install, attach through MCP | pass | Clean GECK; HelloWasteland build/installed SHA `23650eea...`; all three editor panes visible/reachable |
+| Initial HelloWasteland load | pass | `loaded_verified`, 14/14 references; explicit `editor_session` accepted |
+| Forced HelloWasteland reload | pass | `reload=true` completed as `loaded_verified`; 14/14 references still match |
+| Cell framing and render captures | pass | Frames `light.red` and `barrel.left`; nonblank 455x169 PrintWindow PNGs. 2Shay confirmed the view was perfect, correcting an accidental negative answer |
+| Fresh stdio MCP discovery / test-plugin load | pass | 25 tools; isolated plugin built/installed, loaded and attached with its configured STAT identity |
+| Script compiler CLI, without `--skip-load` | pass | Automatically recognised `already_loaded`; HelloPreviewScript actually compiled with no errors, saved, cached, rebuilt and installed; no uncompiled scripts remain; exit 0 |
+| Compiled test-plugin reload / attach | pass | Forced MCP reload returned `loaded_verified` |
+| Preview open / close through MCP | pass | HelloPreviewTile preview opened and closed; lifecycle/identity checked, preview image not separately visually assessed |
+| Guarded whole-plugin MCP save / persisted validation | pass | `save_entire_active_plugin=true` with expected hash/model; `saved_verified`, then persisted STAT/model validation passed |
+| Clean GECK restart / new session | pass | PID changed 19108 → 21476; HelloWasteland loaded and verified again with 14/14 refs |
+| Post-restart render capture | pass after uncovering | Initial `CAPTURE_BLANK` safely refused because Cell View covered Render Window. Existing guarded helper `render.steps` max/redraw brought it forward: nonblank 1280x777 PrintWindow. After restoring normal layout, nonblank 910x338 screen capture at 200% DPI |
+| Cleanup / preserved mod | pass | No unresolved Hello operations; GECK left clean on HelloWasteland. SalvatoreGanacci.esp and game plugins.txt SHA-256 unchanged. New throwaway ESP moved out of Data into ignored evidence, not deleted |
+
+Raw evidence: `bridge/state/acceptance/final-20261006-codex/` (ignored): `final-direct-mcp.json`,
+`preview-mcp.jsonl`, `render-layout.json`, `cleanup.json`, `protected-files.json`, test profile/spec/script and saved
+test ESP. Captures are under ignored `bridge/photos/render-20261006-*.png`.
+
+Not repeated: deliberate crash mid-load (prior acceptance already covered it), GECK Extender, Wine/Proton or macOS.
+The compiler is a supported CLI, not an MCP compilation tool. The fresh stdio test covers preview/save; those steps
+were not performed using the HelloWasteland connector because its profile deliberately has no configured STAT records.
+
 ## 2026-10-06: Codex bridge takeover and console diagnosis
 
 Fix 9 follow-up: public suite **169 tests passed, 3 skipped**, ESP verifier **6 passed**; isolated workshop migration

@@ -38,4 +38,16 @@ uncommitted mod files are preserved byte-for-byte and remain uncommitted. Backup
 `_to_delete/bridge-before-fix9-primary`. Post-adoption 13 workshop tests passed; current delegated build dry-run
 reproduces `c8fa39d0...`. The canonical public bridge is now used by the active workshop. Fix 9 complete.
 
-Next action: final HelloWasteland MCP acceptance cycle, using the existing procedures in docs/TESTING.md.
+## Final live acceptance — complete, 6 October 2026
+
+Native vanilla GECK/MCP workflow passed: HelloWasteland load and forced reload, 14/14 references, cell framing and
+render capture (user confirmed the view was perfect); fresh stdio MCP test-plugin load, preview open/close, actual
+script compile/save/cache/rebuild via CLI without --skip-load, compiled-plugin reload, guarded MCP save and persisted
+validation. Clean GECK restart created a new session and HelloWasteland again loaded/verified/rendered correctly.
+
+One post-restart capture safely failed while Cell View covered Render Window; existing guarded render max/redraw,
+then restore, recovered capture. No code change required. No unresolved Hello operations remain. Salvatore plugin
+and game plugins.txt hashes are unchanged. The throwaway ESP was moved from Data to ignored test evidence. GECK
+remains open, clean, with HelloWasteland loaded; the mod agent can now use it. Full results and limits: docs/TESTING.md.
+
+Next action: complete for the tested native Windows bridge workflow. Nexus/release packaging was not requested.

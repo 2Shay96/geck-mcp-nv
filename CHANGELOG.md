@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Final native Windows 11 / vanilla GECK acceptance completed on 6 October: direct MCP load/reload/cell/render,
+  stdio MCP preview and guarded save, actual script compilation through the CLI, and successful load/render after
+  a clean GECK restart. Salvatore and game plugin activation list were unchanged. See docs/TESTING.md for evidence
+  and the covered-window capture retry.
+
 - Bridge 0.2.1: port the workshop sprite tool's `--collision-static` option and collision motion readback so
   the workshop can depend on this implementation without losing its unmovable defeated sprite. Fixed collision
   uses static layer, motion system 7, fixed quality, zero mass/inertia and clears the dynamic BSX flag.
