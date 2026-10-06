@@ -1,4 +1,4 @@
-# GECK MCP for New Vegas: WIP prototype (v0.2.0)
+# GECK MCP for New Vegas: WIP prototype (v0.2.1)
 
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1: shared bridge and final live acceptance (2026-10-06)
 
 - Final native Windows 11 / vanilla GECK acceptance completed on 6 October: direct MCP load/reload/cell/render,
   stdio MCP preview and guarded save, actual script compilation through the CLI, and successful load/render after
