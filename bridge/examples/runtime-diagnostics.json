@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "plugin": "ExampleDiagnostic.esp",
+  "probes": [
+    {"key": "state", "kind": "quest_variable", "local_form": "000801", "variable": "State"},
+    {"key": "carried", "kind": "item_count", "local_form": "000802"},
+    {"key": "disabled", "kind": "disabled", "local_form": "000803"},
+    {"key": "dead", "kind": "dead", "local_form": "000803"}
+  ],
+  "rules": [
+    {"key": "one_item", "kind": "count_limit", "fields": ["carried"], "maximum": 1},
+    {"key": "valid_state", "kind": "range", "fields": ["state"], "minimum": 0, "maximum": 4},
+    {"key": "preserve_state", "kind": "unchanged", "fields": ["state"]}
+  ]
+}

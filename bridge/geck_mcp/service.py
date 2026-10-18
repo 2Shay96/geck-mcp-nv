@@ -34,6 +34,10 @@ CAPABILITIES = {
                 '(state "stale") once GECK runs with a different session (restart). CLI: recover.py',
     'tools': {
         'geck_status': {'effect': 'observe'},
+        'geck_runtime_prepare': {'effect': 'preview or create unique vanilla batches; user executes', 'adapter': 'vanilla Windows: live item-count/delta/error capture; quest/reference probes offline tested'},
+        'geck_runtime_collect': {'effect': 'bounded log read; write local checkpoint/report; no editor lock'},
+        'geck_runtime_report': {'effect': 'replay local report; optional sanitized export'},
+        'geck_runtime_close': {'effect': 'stop collection; archive unchanged owned helpers after game exit; does not stop SCOF'},
         'geck_inspect_windows': {'effect': 'observe', 'scope': 'bounded GECK control inventory'},
         'geck_show_windows': {'effect': 'show hidden Object Window, Cell View and Render Window (no clicks)'},
         'geck_project_attach': {'effect': 'observe'},
@@ -93,6 +97,35 @@ def make_transport(project):
 
 
 class Service:
+    def runtime_call(self, mode, args, request_key=None):
+        """Runtime operations have a separate per-install lock/journal namespace.
+
+        No waits for user gameplay occur inside these bounded calls. Interrupted
+        runtime preparation cannot create a GECK recovery barrier.
+        """
+        from .runtime import Runtime
+        if mode not in ('prepare', 'collect', 'report', 'close'):
+            raise ValueError('Unknown runtime operation')
+        # run() keeps per-operation dispatch/journal context on its Service instance.
+        # A separate instance lets an editor call run concurrently under its own lock
+        # without runtime collection overwriting that editor operation's context.
+        runtime_service = Service(self.project, transport=self.transport)
+        def on_change():
+            runtime_service._mutation_dispatched = True
+        runtime = Runtime(self.project, on_change)
+        def action():
+            data = getattr(runtime, mode)(**args)
+            if mode == 'prepare' and not args.get('preview'):
+                data['_outcome'] = 'runtime_prepared'
+            elif mode == 'collect' and data.get('checkpoint'):
+                data['_outcome'] = 'runtime_collected'
+            elif mode == 'close':
+                data['_outcome'] = 'runtime_closed'
+            return data
+        return runtime_service.run('geck_runtime_' + mode, args, action, request_key=request_key,
+                        modifies=mode in ('prepare', 'close'), editor=False,
+                        lock_root=self.project.game_root / '.geck-runtime-lock')
+
     def __init__(self, project, transport=None):
         self.project = project
         self.transport = transport or make_transport(project)
@@ -200,7 +233,7 @@ class Service:
                 blocking.append(row)
         return released, blocking
 
-    def run(self, name, args, action, request_key=None, modifies=False, editor=True):
+    def run(self, name, args, action, request_key=None, modifies=False, editor=True, lock_root=None):
         started = time.monotonic()
         operation_id = str(uuid.uuid4())
         fingerprint = hashlib.sha256(json.dumps([name, args], sort_keys=True).encode()).hexdigest()
@@ -208,7 +241,7 @@ class Service:
         try:
             if request_key is not None and not re.fullmatch(r'[A-Za-z0-9_.:-]{1,100}', request_key):
                 raise ValueError('request_key must be 1..100 simple identifier characters')
-            with bottle_lock(self.project.lock_root):
+            with bottle_lock(lock_root or self.project.lock_root):
                 with closing(self.db()) as db, db:
                     if request_key:
                         row = db.execute('SELECT * FROM operations WHERE project=? AND request_key=?',
@@ -232,7 +265,7 @@ class Service:
                                                            '(or recover.py --list / --ack). Restarting GECK '
                                                            'releases it automatically.'})
                     db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
-                               (operation_id, self.project.project_id, str(self.project.lock_root), name,
+                               (operation_id, self.project.project_id, str(lock_root or self.project.lock_root), name,
                                 request_key, fingerprint, 'running', None, time.time(), None))
                 began = True
                 self._mutation_dispatched = False

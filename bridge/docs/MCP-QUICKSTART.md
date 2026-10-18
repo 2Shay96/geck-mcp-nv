@@ -4,6 +4,112 @@
 
 This is a local stdio MCP server for the 32-bit Fallout New Vegas GECK. It was developed under CrossOver on macOS and is tested end to end on Windows 11 (`launcher: native`); the Linux (`launcher: wine`) path is untested. It loads configured plugins with exactly FalloutNV.esm as master and edits configured existing STAT model fields. Record creation, cell placement, animation checks, and gameplay checks remain unsupported.
 
+## Runtime diagnostics (29 bridge tools)
+
+The runtime feature uses native vanilla FNV `bat` + `scof`. The user runs batches and
+performs gameplay actions. It never drives the screen, runs gameplay mutations,
+attaches to GECK or assumes xNVSE is available. Installed extender files are not
+runtime capability evidence. Windows vanilla item-count/delta/error capture passed
+on 18 October 2026; valid quest-variable/reference probes have offline coverage only.
+Wine/CrossOver runtime behavior is unverified.
+
+Use a regular project configuration for game/state paths. Runtime probes have their
+own strict version-1 profile, separate from the project's STAT records. Start from
+[`examples/runtime-diagnostics.json`](../examples/runtime-diagnostics.json), a fictional
+profile: replace its plugin, six-digit **local** forms and quest variable names with
+your own. Do not run the example unchanged. Probe kinds are `quest_variable` (`sqv`,
+requires `variable`), `item_count` (player inventory), `disabled` and `dead` (persistent
+reference selected with `prid`). Only targeted observations are collected; no broad
+inventory dump or arbitrary console code is accepted.
+
+Supply `runtime_mapping` as `{"prefix":"XX","source":"unknown","evidence":""}`
+with XX replaced by the session's actual two hex digits. `disk_order` is also
+unverified. Only `user_runtime_observation` with a description of fresh in-game
+FormID evidence yields `user_attested` identity. This is a user's attestation, not
+automatic proof of correct mapping. Observe a known item's full FormID in the
+current console and corroborate the expected quest variables/reference. Never
+reuse a historical prefix. A successful capture alone cannot establish identity.
+
+CLI/MCP share `Service.runtime_call`, validation, locking, journal and reports:
+
+| MCP tool | CLI subcommand | Inputs beyond `--project` |
+| --- | --- | --- |
+| `geck_runtime_prepare` | `prepare` | profile object / `--profile JSON`; save_label / `--save-label`; runtime_mapping object / `--runtime-mapping JSON`; expected_plugin_hash / `--expected-plugin-hash`; request_key / `--request-key`; optional preview / `--preview` |
+| `geck_runtime_collect` | `collect SESSION` | checkpoint_label / `--checkpoint-label`; CLI-only `--watch-seconds 0..60` |
+| `geck_runtime_report` | `report SESSION` | optional baseline_checkpoint / `--baseline-checkpoint`; sanitized / `--sanitized` |
+| `geck_runtime_close` | `close SESSION` | request_key / `--request-key`; archive_helpers / `--archive-helpers`; game_exited / `--game-exited` |
+
+From `bridge/` on Windows (replace uppercase placeholders):
+
+```powershell
+.venv\Scripts\python.exe runtime_diagnostics.py --project projects\hellowasteland.json prepare --profile PROFILE.json --runtime-mapping MAPPING.json --save-label "Disposable save, before action" --expected-plugin-hash SHA256 --request-key preview-1 --preview
+# Review the exact commands and side effects, then repeat without --preview and with a NEW request key.
+.venv\Scripts\python.exe runtime_diagnostics.py --project projects\hellowasteland.json collect SESSION --checkpoint-label before --watch-seconds 30
+.venv\Scripts\python.exe runtime_diagnostics.py --project projects\hellowasteland.json report SESSION --baseline-checkpoint before
+.venv\Scripts\python.exe runtime_diagnostics.py --project projects\hellowasteland.json close SESSION --request-key close-1
+```
+
+Preparation hashes the **profile's installed plugin** in `Data`, checks the supplied
+SHA-256 before/after, and returns unique filenames, commands, hashes (in the manifest)
+and exact `bat` instructions. New batches use short `gd_<8 hex digits>` stems for
+manual entry; the manifest retains the full session ID. It writes exclusive-create CRLF ASCII helpers and never
+overwrites existing files. `--preview` writes no helpers or manifest; the operation
+itself is journaled. Reusing a request key with identical arguments replays the original
+result; different arguments conflict. After interruption inspect `geck_operation_get`
+and the local manifest before retrying with a new key. Partial preparation is not runnable.
+
+Run `start` **once**, collect the baseline, close the console and perform the deliberate
+action, then run `sample` once and collect a new explicit label. Collect each checkpoint
+before running another batch; multiple unlabelled cycles are ambiguous and require a
+new session. Never rerun start on an existing log: SCOF can truncate it. Every new save,
+load, plugin build or runtime load order requires a **new session and baseline**.
+Vanilla cannot automatically detect all save changes. Batches are flattened (no nested
+`bat`), redirect console logging, and change the selected reference, ending on player
+`00000014`. Do not overlap another console logger. Sequential queries are not atomic;
+same-frame readback cannot verify a gameplay mutation.
+
+Collection returns promptly: `LOG_MISSING`, `LOG_LOCKED` and `NO_FRESH_SAMPLE` mean
+`awaiting_output`. It retries locked reads three times, preserves incomplete lines,
+binds responses to the exact ordered echoed commands/forms, and retains source line
+numbers/raw lines. Unrelated commands break an unfinished sample; command echoes are
+never values. Missing values remain missing. An unexpected form cannot satisfy a probe.
+`LOG_REPLACED` invalidates continuity (including same-size rewrites); `LOG_TOO_LARGE`
+limits a session to 16 MiB; `AMBIGUOUS_CHECKPOINT` refuses to invent action labels.
+Console errors remain attached to their cycle; unrelated errors are separately visible.
+
+`state_dir/runtime/SESSION/` holds `manifest.json` (identity, save label, timestamps,
+mapping evidence, exact owned paths and file hashes), `console.log`, `report.json` and
+`report.md`. Reports can be replayed without FNV running; an absent/changed installed
+plugin lowers current identity confidence. The newest checkpoint is compared to the
+first by default or a named baseline. A report refers to its labelled checkpoint;
+replaying it is not a fresh capture. Capture quality (`complete`, `partial`, `errored`)
+and assertion results (`pass`, `fail`, `inconclusive`) are separate. No rules means
+inconclusive. Unverified identity, missing/errored observations and missing baselines
+cannot pass assertions. A `pass` describes only the declared diagnostic rules.
+
+Rules are versioned data, never Python/eval: `equals` requires `value`; `range` uses
+inclusive `minimum`/`maximum`; `count_limit` requires nonnegative `maximum`;
+`mutually_exclusive` permits at most one nonzero field; `unchanged` requires a separate
+baseline checkpoint with equal values. All rule fields name configured probe keys.
+Reports show before/after/delta and each rule's result. CLI exits: 0 completed operation
+or passing assertions, 1 operation/capture error, 2 awaiting/partial/inconclusive, 3
+assertion failure. Runtime journal outcomes are `runtime_prepared`, `runtime_collected` and
+`runtime_closed`; awaiting/preview/report operations use `unchanged`. These are local
+diagnostic outcomes and do not create editor recovery barriers. An MCP envelope
+`ok=true` means the operation ran; inspect capture
+and assertions for its diagnostic result.
+
+Closing stops **bridge collection only**. It does not send the invalid `scof ""`, stop
+the game logger or claim logger shutdown. Normal FNV exit is the verified SCOF shutdown.
+After normal exit, optional archival requires `game_exited=true`; it moves only
+manifest-owned, unchanged helper batches into the session archive, preserving modified
+helpers, unrelated files, raw logs and evidence. Nothing is deleted.
+
+Reports stay local by default. `report --sanitized` / `sanitized=true` explicitly writes
+`report-sanitized.json` using an allowlist that omits raw lines, mapping evidence, labels,
+paths and session IDs. It still contains diagnostic field/rule names and numeric changes;
+review those before sharing. Never commit raw player logs, saves or private profiles.
+
 ## Helper transport
 
 By default the server keeps one persistent helper (`Probe.Mcp.exe serve`) and falls back to one Wine launch per call if the handshake fails. Set `"transport": "oneshot"` in the project JSON or `GECK_MCP_TRANSPORT=oneshot` to force the legacy path. `geck_status` reports the active mode under `bridgeTransport`. See [M1-FAST-BRIDGE.md](M1-FAST-BRIDGE.md).

@@ -69,3 +69,29 @@ the editor worked. Chrome extension needed user-enabled access to file URLs for 
 
 Next action: verify Nexus scan completion and availability of the new download. Release kit and screenshots live
 outside Git in the parent nexus folder; no archive/binary/test evidence committed.
+
+## 18 October 2026 - runtime diagnostics implemented and accepted
+
+Implemented reusable runtime diagnostics with a strict separate v1 profile, per-save
+session manifest and plugin/mapping/file identity, short unique flattened vanilla
+batches, incremental log parsing with raw provenance and continuity checks, explicit
+checkpoints/deltas, declarative assertions and local JSON/Markdown reports. CLI and
+four MCP tools share the journaled Service core (29 tools total); runtime locks and
+operation context remain separate from GECK. Closing collection does not stop SCOF;
+archival requires normal-exit attestation and moves only unchanged owned helpers.
+
+Offline: 189 bridge tests ran, 186 passed / 3 skipped (20 runtime tests); ESP verifier
+6 passed, Windows-port 23 passed. Fresh stdio MCP/CLI reports match. Old/new bridge
+builders produced identical bytes against the same current read-only workshop inputs.
+
+Windows vanilla live acceptance passed: fresh targeted inventory count 3 -> 2 after
+one user drop (delta -1), rejected quest query recorded as an error with missing value
+and inconclusive assertions, then user-confirmed normal exit and six owned helpers
+archived. A live CR CR LF error-output bug was fixed and regression tested; short
+batch names reduce transcription errors. Logs, saves, private profiles and evidence
+remain outside public source. Valid quest-variable/reference probes are offline tested;
+Wine/CrossOver and extender runtime behavior remain unverified. No workshop edits,
+GECK actions, screen control, gameplay automation or plugin/save modifications.
+
+Next action: push the scoped feature branch, open/attach its PR and verify all four
+required CI jobs; wait for explicit approval before merge, tags or Nexus publication.

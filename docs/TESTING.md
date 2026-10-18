@@ -1,5 +1,44 @@
 # Testing log
 
+## 18 October 2026 - runtime diagnostics (offline)
+
+- Bridge suite: 189 tests, 186 passed / 3 skipped; 20 new synthetic runtime tests.
+- Fresh stdio MCP process exercises all four runtime tools; CLI and MCP reports match.
+- ESP verifier: 6 passed. Windows-port regression: 23 passed.
+- Incremental parser tested at every byte boundary, including split CRLF; command
+  echoes, wrong forms, missing values, partial/locked/rewritten logs, query errors,
+  ambiguous checkpoints and unverified identity cannot become a passing assertion.
+- Checked idempotency, declarative pass/fail/inconclusive rules, checkpoint deltas,
+  safe helper archival, and independence from editor locks and operation context.
+- Old HEAD and feature builders produced identical Salvatore bytes on the same current
+  private inputs (SHA-256 c4cb440371c544389a7b15ecf818dc156f96dd5eca46e5d22e0fd0e6c3e54b63).
+  Workshop inputs changed during the earlier before/after check; no writer change.
+- Local acceptance launcher passed a synthetic end-to-end harness test; actual game
+  results are listed separately below. No runtime Wine/CrossOver/extender support is claimed.
+- Known existing test noise: intentional negative protocol error traces and worker
+  ResourceWarnings; neither failed these offline suites.
+
+
+## 18 October 2026 - runtime Windows vanilla acceptance
+
+- User supplied fresh console inventory identity for an ordinary vanilla item. A
+  complete baseline count 3 and a separately executed post-drop count 2 produced
+  delta -1, with exact command/form binding and raw source-line provenance.
+- Intentionally querying the inventory item as a quest produced the expected invalid
+  quest error: capture=errored, missing observation, assertions=inconclusive. No false
+  zero or pass. Missing output from an earlier mistyped batch also stayed awaiting_output.
+- Live compiler output exposed a CR CR LF parsing bug. Fixed LF record boundaries,
+  added a synthetic repeated-CR compiler-error fixture and every-byte replay check,
+  then replayed the unchanged log after preserving the pre-fix manifest. No previous
+  accepted checkpoint was rewritten and no extra game action was needed for the fix.
+- Shortened new batch names for manual entry. Closed bridge collection without claiming
+  logger shutdown; user then confirmed normal FNV exit. Archived all six unchanged
+  owned batches across the active/unused sessions, preserving logs and evidence locally.
+- Valid quest-variable and persistent-reference probes remain offline tested only.
+  Live acceptance used the same Service core; fresh stdio MCP/CLI parity was tested
+  offline. No GECK attachment, screen control, plugin/save edits or workshop edits.
+
+
 What has been run, where, and what happened. Newest first.
 
 ## 2026-10-06: final live native MCP acceptance, bridge 0.2.1
