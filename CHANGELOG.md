@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased: runtime diagnostics
+
+- Add shared runtime diagnostics core, CLI and four MCP tools (29 total): prepare,
+  collect, report and close. Vanilla batches are user-run; no screen control or
+  assumed extender capability. Versioned profiles support quest variables, targeted
+  inventory counts and persistent-reference disabled/dead flags with per-session mapping.
+- Record explicit save/checkpoint labels, plugin/file hashes, mapping evidence and raw
+  line provenance. Detect missing/partial/locked/rewritten logs; echoes never become
+  observations. Compare checkpoints and evaluate declarative assertions separately
+  from capture quality and user-attested identity.
+- Add separate runtime locks/journal namespace, idempotent prepare/close, local
+  JSON/Markdown reports, explicit sanitized export and ownership-safe helper archival.
+  Closing collection does not stop SCOF. Windows vanilla item-count/delta/error acceptance passed; quest-variable and reference probes have offline coverage only.
+
 ## 0.2.1: shared bridge and final live acceptance (2026-10-06)
 
 - Final native Windows 11 / vanilla GECK acceptance completed on 6 October: direct MCP load/reload/cell/render,

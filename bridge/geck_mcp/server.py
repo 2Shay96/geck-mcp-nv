@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from . import __version__
 from .config import Project
 from .service import CAPABILITIES, Service
+from .runtime import Profile as RuntimeProfile, Mapping as RuntimeMapping
 
 Session = Annotated[str, Field(min_length=3, max_length=100)]
 # Optional editor session. Named editor_session because the Claude desktop device proxy drops tool arguments
@@ -40,7 +41,7 @@ class Envelope(BaseModel):
     outcome: Literal['unchanged', 'committed_in_editor', 'saved_verified',
                      'failed_before_change', 'partial_change', 'outcome_unknown', 'loading', 'loaded_verified',
                      'loaded_unverified',
-                     'built', 'installed', 'captured']
+                     'built', 'installed', 'captured', 'runtime_prepared', 'runtime_collected', 'runtime_closed']
     data: Any
     error: dict | None
     elapsedMs: int = 0
@@ -76,6 +77,39 @@ def make_server(project, service=None):
     async def geck_status() -> Result:
         """Read current editor/session identity, title, dirty marker, windows and filter. Does not open dialogs."""
         return await invoke(service.status)
+
+    @server.tool(annotations=ui)
+    async def geck_runtime_prepare(profile: RuntimeProfile, save_label: str, runtime_mapping: RuntimeMapping,
+                                   expected_plugin_hash: Hash, request_key: Key, preview: bool = False) -> Result:
+        """Preview/create vanilla diagnostic batches. No GECK attachment. User executes batches; SCOF redirects logging,
+        PRID changes selection (ends on player). Fresh runtime mapping evidence is user-attested, never inferred from disk.
+        Preview exact commands before preparing. New save/load requires a NEW session/baseline."""
+        return await invoke(service.runtime_call, 'prepare',
+                            dict(profile=profile.model_dump(), save_label=save_label,
+                                 runtime_mapping=runtime_mapping.model_dump(), expected_plugin_hash=expected_plugin_hash,
+                                 preview=preview), request_key)
+
+    @server.tool(annotations=ui)
+    async def geck_runtime_collect(runtime_session: str, checkpoint_label: str) -> Result:
+        """Collect one fresh batch cycle promptly, or return awaiting_output. Explicit checkpoint labels;
+        never converts missing output to zero/pass. Writes local evidence; no game commands or editor use."""
+        return await invoke(service.runtime_call, 'collect', dict(session=runtime_session, checkpoint_label=checkpoint_label))
+
+    @server.tool(annotations=ui)
+    async def geck_runtime_report(runtime_session: str, baseline_checkpoint: str | None = None,
+                                  sanitized: bool = False) -> Result:
+        """Replay checkpoint comparisons/assertions. Writes JSON/Markdown locally; sanitized=true explicitly exports
+        an allowlisted report without raw log lines, save labels, paths or mapping evidence."""
+        return await invoke(service.runtime_call, 'report', dict(session=runtime_session,
+                            baseline_checkpoint=baseline_checkpoint, sanitized=sanitized))
+
+    @server.tool(annotations=ui)
+    async def geck_runtime_close(runtime_session: str, request_key: Key, archive_helpers: bool = False,
+                                 game_exited: bool = False) -> Result:
+        """Close bridge collection, not the SCOF logger. Optional archival moves only owned unchanged helpers after
+        user confirms normal game exit. Modified helpers and raw logs are preserved. No editor attachment."""
+        return await invoke(service.runtime_call, 'close', dict(session=runtime_session,
+                            archive_helpers=archive_helpers, game_exited=game_exited), request_key)
 
     @server.tool(annotations=observe)
     async def geck_inspect_windows(limit: Annotated[int, Field(ge=1, le=100)] = 50) -> Result:

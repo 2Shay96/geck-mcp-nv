@@ -51,11 +51,12 @@ python3 -m venv .venv
 5. Ask your agent: *"Validate the spec, build the plugin and show me what it contains."*
    This uses `geck_spec_validate`, then `geck_plugin_build`, then `geck_plugin_inspect`, and touches nothing in the game.
 
-## The 25 tools
+## The 29 tools
 
 | Group | Tools |
 | --- | --- |
 | Offline authoring | `geck_spec_validate`, `geck_plugin_build`, `geck_plugin_inspect`, `geck_master_lookup`, `geck_plugin_install` |
+| Runtime diagnostics | `geck_runtime_prepare`, `geck_runtime_collect`, `geck_runtime_report`, `geck_runtime_close` (user-run vanilla batches; Windows item-count/delta/error acceptance passed) |
 | Editor state | `geck_status`, `geck_inspect_windows`, `geck_show_windows`, `geck_capabilities`, `geck_project_attach` |
 | Load & verify | `geck_plugin_load`, `geck_plugin_load_status`, `geck_cell_verify` |
 | Records | `geck_records_find`, `geck_record_read`, `geck_record_set_model`, `geck_preview_open`, `geck_preview_close` |
@@ -65,6 +66,9 @@ python3 -m venv .venv
 
 Tools that act on the running GECK take an optional `editor_session`; leave it out to use the GECK that is running
 (see [docs/MCP-QUICKSTART.md](docs/MCP-QUICKSTART.md)). After changing bridge code, restart your MCP client.
+
+Runtime tools need no editor attachment. Their shared CLI is `runtime_diagnostics.py`;
+see [runtime profiles, identity, capture, assertions and lifecycle](docs/MCP-QUICKSTART.md#runtime-diagnostics-29-bridge-tools).
 
 The same jobs are available from the command line: `build_plugin.py` (`--project` uses the profile's state and build
 folders), `install_plugin.py`, `live_load.py` (`--if-needed`), `cell_verify.py`, `compile_scripts.py` (build, then load in

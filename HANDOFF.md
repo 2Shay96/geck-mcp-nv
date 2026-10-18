@@ -1,5 +1,27 @@
 # GECK MCP bridge handoff
 
+## Runtime diagnostics - current state, 18 October 2026
+
+R1/R2 are implemented on codex/runtime-diagnostics and accepted in Windows vanilla:
+fresh item counts and a checkpoint delta, truthful rejected-query error reporting,
+then owned helper archival after user-confirmed normal FNV exit. Older priorities
+below are historical. Runtime CLI/MCP usage and limits are documented in
+bridge/docs/MCP-QUICKSTART.md; current evidence is in docs/TESTING.md and STATUS.md.
+
+The shared core prepares allowlisted batches, binds incremental observations to exact
+commands/forms, preserves provenance, compares explicit checkpoints and evaluates
+versioned rules. Mapping confidence is user-attested or unverified; no installed
+extender or historical prefix is proof. User executes batches/gameplay actions;
+closing collection does not stop SCOF. New saves/loads require a new baseline.
+
+Offline: 189 bridge tests (3 skipped), 6 ESP checks, 23 Windows-port checks; fresh
+stdio MCP/CLI reports agree. Valid quest-variable/reference probes have offline
+coverage only. Raw evidence, saves, game assets and private profiles stay local.
+
+Next action: review the scoped runtime PR after four required CI jobs pass. Merge,
+version tags and Nexus publication still require 2Shay's explicit approval.
+
+
 Updated 6 October 2026 by Codex. Owner: 2Shay.
 
 ## Scope and location

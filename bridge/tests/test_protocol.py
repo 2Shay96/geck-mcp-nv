@@ -23,7 +23,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             listing = await client.list_tools()
             tools = listing.tools if hasattr(listing, 'tools') else listing
             by_name = {tool.name: tool for tool in tools}
-            self.assertEqual(len(by_name), 25)
+            self.assertEqual(len(by_name), 29)
             self.assertIn('geck_show_windows', by_name)
             for name in ('geck_actor_photo', 'geck_render_capture', 'geck_image_cutout'):
                 self.assertIn(name, by_name)

@@ -10,9 +10,13 @@ Download: [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files).
 
 ## What's inside
 
+The bridge now exposes **29 tools**, including four user-driven vanilla runtime
+diagnostics tools and a shared CLI. They prepare safe query batches, collect fresh
+checkpoint output, compare values and evaluate declarative assertions. Windows vanilla item-count/delta/error capture passed on 18 October; see [usage and limits](bridge/docs/MCP-QUICKSTART.md#runtime-diagnostics-29-bridge-tools).
+
 | Folder | MCP server | What it does | Tested |
 | --- | --- | --- | --- |
-| [`bridge/`](bridge/README.md) | `geck` (25 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
+| [`bridge/`](bridge/README.md) | `geck` (29 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
 | [`windows/`](windows/README.md) | `geck_nv` (46 tools) | **FNV port of [GECK MCP for Fallout 3](https://github.com/maksimka2432fr23/codex-skill-mcp-fallout3)** by maksimka2432fr23. Windows UI automation: launch GECK through NVSE, navigate Cell View and the Object Window, drag objects into the Render Window, load order, transactions and rollback, placed-reference patches. | ❓ Windows (not yet run against the FNV GECK) |
 
 You can run either server on its own, or both at once (their tool names don't overlap).
