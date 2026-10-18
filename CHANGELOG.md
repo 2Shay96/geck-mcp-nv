@@ -7,9 +7,9 @@
   identity and strict fresh-sample checks. Add shared CLI and two automatic MCP
   tools (31 total). No console typing, screen control or arbitrary command endpoint.
 - Native fake-host tests exercise the generated 32-bit DLL and failure/lifecycle
-  cases; Windows CI builds with hash-verified Zig. The project-specific precursor
-  passed live diagnostics/fix regression; the generalized adapter still needs its
-  own in-game acceptance and is documented as experimental.
+  cases; Windows CI builds with hash-verified Zig. The precursor passed live
+  diagnostics/fix regression; the generalized adapter passed main-server MCP/CLI
+  in-game acceptance on Windows/xNVSE 6.4.9 on 19 October.
 
 - Add shared runtime diagnostics core, CLI and four MCP tools (29 total): prepare,
   collect, report and close. Vanilla batches are user-run; no screen control or

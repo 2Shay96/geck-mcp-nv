@@ -118,3 +118,23 @@ Pre-existing HANDOFF.md/MCPworkflow.md/STATUS.md edits preserved. Work is on
 codex/automatic-runtime, based on codex/runtime-diagnostics (PR #3); no merge,
 tag or Nexus release authorized. Next action: push checked scoped commit and
 open a dependent PR for review, then verify CI.
+
+
+## 19 October 2026 - generalized automatic companion live acceptance passed
+
+Executed release-plan step 1 against the public generated companion with the
+prototype archived. Fresh main-server stdio MCP (31 tools) and shared CLI both
+verified current process/module/profile/build identity and runtime-resolved index.
+Driving speed=expected=250, idle fuel used=0, fuel unchanged across two seconds,
+initialized=1; all four rules passed. Later stopped samples showed speed 100 and
+SpeedDelta/SpeedApplied zero; driving-to-stop comparison returned expected deltas.
+A deliberately wrong expected build hash returned an error with no observations.
+
+The ignored local harness initially assumed Fuel must equal 100; it correctly
+failed because moving to the panel used a little fuel. Preserved that capture,
+changed the harness to require positive fuel plus zero parked consumption, and
+reran successfully. No public runtime source changed or test was weakened.
+Raw evidence stays in the separate local test project's ignored state. Updated
+public validation docs; no merge, version change, tag or Nexus release performed.
+
+Next action: review/authorize release-plan step 2 (merge PR #3, then PR #4 into main).

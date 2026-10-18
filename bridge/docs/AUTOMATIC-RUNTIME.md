@@ -111,9 +111,19 @@ The reusable adapter adds generated profiles, strict installed ownership/build
 binding and integration into the main server. Its generated 32-bit DLL is tested
 under a fake xNVSE host in six modes: complete values, missing plugin, missing
 variable, nonfinite output, compilation failure and runtime script error, plus
-load failure, epoch changes, exit and bounded expression compilation. It has not
-received a separate in-game acceptance run after generalization. Treat that as a
-remaining experimental validation limit, not as a live pass for every profile.
+load failure, epoch changes, exit and bounded expression compilation.
+
+On 19 October 2026, the generalized adapter also passed in-game acceptance using
+its generated profile/DLL, with the precursor disabled. A fresh 31-tool main MCP
+server and the shared CLI verified the loaded companion, build/profile identity
+and game-resolved prefix. Stationary driving reported speed 250, zero speed error,
+zero idle fuel used and fuel unchanged over two seconds; all four configured
+rules passed. A later stopped sample restored speed from 250 to 100 and cleared
+the speed effect; comparing against the driving baseline returned the expected
+deltas. A deliberately wrong expected ESP hash was rejected without observations.
+These observations cover the tested isolated quest on Windows and
+xNVSE 6.4.9, not every profile or supported extender release.
+
 Portable tests cover malformed/stale data, identity changes, assertions, deltas,
 receipt ownership/backups and CLI/MCP service envelopes. Windows CI downloads the
 pinned official compiler, verifies its hash and exercises the generated DLL.
