@@ -6,6 +6,10 @@ This is a local stdio MCP server for the 32-bit Fallout New Vegas GECK. It was d
 
 ## Runtime diagnostics (29 bridge tools)
 
+The four vanilla tools below remain available. The server now has 31 tools total:
+two additional automatic snapshot/compare tools use an optional read-only xNVSE
+companion. See [automatic setup and validation limits](AUTOMATIC-RUNTIME.md).
+
 The runtime feature uses native vanilla FNV `bat` + `scof`. The user runs batches and
 performs gameplay actions. It never drives the screen, runs gameplay mutations,
 attaches to GECK or assumes xNVSE is available. Installed extender files are not

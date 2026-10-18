@@ -24,6 +24,20 @@ jobs:
         env:
           PYTHONPATH: .
       - run: python -m unittest discover -s . -p test_esp_check.py -v
+      - name: Prepare pinned Zig for native companion tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path state/zig-ci | Out-Null
+          Invoke-WebRequest -Uri https://ziglang.org/download/0.14.1/zig-x86_64-windows-0.14.1.zip -OutFile state/zig-ci/zig.zip
+          $archiveHash = (Get-FileHash state/zig-ci/zig.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($archiveHash -ne '554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c') { throw 'Zig archive hash mismatch' }
+          Expand-Archive -LiteralPath state/zig-ci/zig.zip -DestinationPath state/zig-ci
+      - name: Exercise generated 32-bit companion DLL under fake xNVSE host
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -p test_runtime_companion.py -v
+        env:
+          GECK_MCP_ZIG: '${{ github.workspace }}\bridge\state\zig-ci\zig-x86_64-windows-0.14.1\zig.exe'
   windows-port:
     runs-on: windows-latest
     defaults:

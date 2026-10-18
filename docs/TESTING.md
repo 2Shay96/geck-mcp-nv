@@ -1,5 +1,22 @@
 # Testing log
 
+## 18 October 2026 - optional automatic xNVSE diagnostics
+
+- Bridge: 197 tests ran, 193 passed / 4 skipped (three existing platform skips and
+  optional native compilation). ESP verifier: 6 passed; Windows-port: 23 passed.
+- Separate Windows native suite with GECK_MCP_ZIG: all 8 companion tests passed,
+  including compilation and execution of the generated 32-bit DLL in six fake-host
+  modes, plus load failure/epoch/exit and bounded compile-cache checks.
+- Fresh stdio main-server discovery exposes 31 tools. Both new tools report
+  structured unavailable errors without a configured/loaded companion. Portable
+  service tests cover positive reads, rule failures/pass, deltas, malformed/stale
+  data, process/load/build mismatch and guarded installation/backup/rebinding.
+- The project-specific precursor passed live CLI/fresh stdio MCP diagnostics and
+  source-fix regression on Windows/xNVSE 6.4.9: speed 60 -> 250, idle fuel drain
+  1.5 per 1.5 seconds -> zero over two seconds. The generalized public adapter has
+  native fake-host coverage, not a separate in-game acceptance pass. No game assets,
+  saves, raw logs or local profiles are included. See bridge/docs/AUTOMATIC-RUNTIME.md.
+
 ## 18 October 2026 - runtime diagnostics (offline)
 
 - Bridge suite: 189 tests, 186 passed / 3 skipped; 20 new synthetic runtime tests.

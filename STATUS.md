@@ -95,3 +95,26 @@ GECK actions, screen control, gameplay automation or plugin/save modifications.
 
 Next action: push the scoped feature branch, open/attach its PR and verify all four
 required CI jobs; wait for explicit approval before merge, tags or Nexus publication.
+
+
+## 18 October 2026 - automatic xNVSE runtime companion prepared for review
+
+User authorized committing/pushing the automatic capability proven in a disposable
+local debug mod. Generalized it into a source-only optional Windows xNVSE 6.4.9+
+companion, strict generated one-quest profiles, guarded installation/build binding,
+automatic OS/process/module/load identity, fresh complete snapshots and comparisons.
+Added shared CLI plus two main-server MCP tools (31 total), documentation and
+Windows CI native DLL tests with a hash-verified official Zig compiler. No toy mod,
+game assets, saves, raw evidence, private workshop edits or desktop config included.
+
+Checks: 197 bridge tests ran / 193 passed / 4 skipped; separate native suite all
+8 passed, exercising the actual generated 32-bit DLL in six fake xNVSE host modes.
+ESP verifier 6 passed, Windows-port 23 passed, fresh stdio protocol 4 passed.
+The precursor passed live automatic CLI/MCP failure -> source fix -> regression
+(speed 60 -> 250; parked fuel drain -> zero). The generalized public adapter
+still needs a separate in-game acceptance run and is explicitly experimental.
+
+Pre-existing HANDOFF.md/MCPworkflow.md/STATUS.md edits preserved. Work is on
+codex/automatic-runtime, based on codex/runtime-diagnostics (PR #3); no merge,
+tag or Nexus release authorized. Next action: push checked scoped commit and
+open a dependent PR for review, then verify CI.

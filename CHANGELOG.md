@@ -2,6 +2,15 @@
 
 ## Unreleased: runtime diagnostics
 
+- Add optional read-only xNVSE companion with generated single-quest profiles,
+  guarded install/build binding, runtime-resolved load index, process/module/load
+  identity and strict fresh-sample checks. Add shared CLI and two automatic MCP
+  tools (31 total). No console typing, screen control or arbitrary command endpoint.
+- Native fake-host tests exercise the generated 32-bit DLL and failure/lifecycle
+  cases; Windows CI builds with hash-verified Zig. The project-specific precursor
+  passed live diagnostics/fix regression; the generalized adapter still needs its
+  own in-game acceptance and is documented as experimental.
+
 - Add shared runtime diagnostics core, CLI and four MCP tools (29 total): prepare,
   collect, report and close. Vanilla batches are user-run; no screen control or
   assumed extender capability. Versioned profiles support quest variables, targeted

@@ -23,8 +23,10 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             listing = await client.list_tools()
             tools = listing.tools if hasattr(listing, 'tools') else listing
             by_name = {tool.name: tool for tool in tools}
-            self.assertEqual(len(by_name), 29)
+            self.assertEqual(len(by_name), 31)
             self.assertIn('geck_show_windows', by_name)
+            self.assertIn('geck_runtime_snapshot', by_name)
+            self.assertIn('geck_runtime_compare', by_name)
             for name in ('geck_actor_photo', 'geck_render_capture', 'geck_image_cutout'):
                 self.assertIn(name, by_name)
             self.assertIn('RESUMABLE', by_name['geck_actor_photo'].description)
@@ -81,6 +83,16 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             result = await client.call_tool('geck_plugin_validate', {'expected_models':{'FixtureStatic':'fixture\\old.nif'}})
             self.assertFalse(result.is_error, result)
             self.assertTrue(result.structured_content['data']['persistenceVerified'])
+            result = await client.call_tool('geck_runtime_snapshot', {
+                'profile':{'plugin':'Fixture.esp','probes':[{'key':'fuel','kind':'quest_variable',
+                    'local_form':'000803','variable':'Fuel'}]},'expected_plugin_hash':'0'*64})
+            self.assertFalse(result.structured_content['ok'])
+            self.assertEqual(result.structured_content['error']['code'],'RUNTIME_COMPANION_UNAVAILABLE')
+            result = await client.call_tool('geck_runtime_compare', {
+                'profile':{'plugin':'Fixture.esp','probes':[{'key':'fuel','kind':'quest_variable',
+                    'local_form':'000803','variable':'Fuel'}]},'expected_plugin_hash':'0'*64,'baseline':{}})
+            self.assertFalse(result.structured_content['ok'])
+            self.assertEqual(result.structured_content['error']['code'],'RUNTIME_COMPANION_UNAVAILABLE')
 
     async def test_legacy_initialize_client(self):
         async with Client(make_server(self.fixture.p, self.fixture.service), mode='legacy') as client:
