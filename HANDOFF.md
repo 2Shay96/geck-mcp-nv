@@ -1,5 +1,19 @@
 # GECK MCP bridge handoff
 
+## Current release and future direction - 19 October 2026
+
+Runtime diagnostics are implemented and released as 0.3.0; PRs #3, #4 and #5
+have merged. The older implementation brief below is historical context.
+For the owner's future product direction, read [docs/V1-VISION.md](docs/V1-VISION.md).
+It describes the build/compile/playtest/fix loop, proposed game vision and bounded
+controls, and a first room-test demonstrator. These gameplay capabilities are
+future work, not an existing feature or authorization to operate the game.
+
+At a validated, approved v1.0 release, remove the Nexus prototype/WIP warning
+and Linux/Mac references from current user-facing presentation as specified in
+that document. Keep the GitHub link and newer-development-version note. Do not
+apply those presentation changes to 0.3.0 or discard historical/licence records.
+
 ## Runtime diagnostics - current state, 18 October 2026
 
 R1/R2 are implemented on codex/runtime-diagnostics and accepted in Windows vanilla:

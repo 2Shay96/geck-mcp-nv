@@ -190,3 +190,23 @@ Updated main's public release links/status. Runtime code/archive are unchanged;
 no new gameplay acceptance required. Existing dirty coordination docs preserved;
 workshop and game untouched. Publication evidence/receipts remain in the local
 sibling nexus kit. Next action: confirm Nexus scan/download availability.
+
+
+## 19 October 2026 - v1.0 vision recorded for future agents
+
+Owner requested a persistent future direction. Added docs/V1-VISION.md and linked
+it from README and a current-release note at the top of HANDOFF. The vision
+covers dependable Windows setup/editor operations, shared runtime checks, optional
+game-window vision, bounded opt-in gameplay controls and a repeatable toy-car
+room scenario that demonstrates failure, repair and successful retest. It clearly
+distinguishes the existing 0.3.0 measurement layer from future gameplay features.
+
+Recorded explicit future v1.0 presentation requirements: remove Nexus prototype/
+WIP warnings and Linux/Mac references from current user-facing presentation once
+v1.0 is validated and approved; preserve history, attribution and licences. Keep
+the GitHub source/newer development-version note. No current Nexus page, tag,
+runtime implementation, workshop or game session changed for this docs task.
+
+Checked document content, relative links and scoped staged diff. Pre-existing
+HANDOFF/MCPworkflow/STATUS edits preserved and excluded from the commit.
+Task complete. Next action: consult this vision when v1.0 implementation is requested.

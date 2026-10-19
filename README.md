@@ -60,6 +60,8 @@ fights the player in game.
 
 ## Status and roadmap
 
+The [v1.0 vision](docs/V1-VISION.md) records the proposed Windows build/compile/playtest/fix workflow and future release presentation requirements.
+
 v0.3.0 adds runtime diagnostics to the existing bridge server and remains a prototype release.
 The v0.2 series fixed what broke while building a real mod on Windows: tools now work
 through Claude's Cowork device proxy, hidden GECK windows are restored, stale recovery barriers clear themselves after
