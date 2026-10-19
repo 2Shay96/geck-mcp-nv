@@ -1,6 +1,6 @@
-# GECK MCP for New Vegas: WIP prototype (v0.2.1)
+# GECK MCP for New Vegas: WIP prototype (v0.3.0)
 
-Download: [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files).
+The source is version **0.3.0**. The [Nexus download](https://www.nexusmods.com/newvegas/mods/99851?tab=files) remains **0.2.1** until a separately approved upload. See [upgrading and release checks](docs/RELEASING.md).
 
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 
@@ -48,7 +48,8 @@ fights the player in game.
 - Fallout: New Vegas and its GECK (Steam: Library → Tools). This package contains **no** game files, GECK or ESM data.
   Each user builds their own master index locally.
 - Python 3.12+ and an MCP client.
-- Optional: NVSE (for `geck_launch(via_nvse=true)`). PyFFI for the sprite tools installs with `bridge/requirements.lock.txt`.
+- Optional automatic quest diagnostics: native Windows Steam FNV 1.4.0.525, xNVSE 6.4.9 or newer 6.x, and Zig 0.14.1 to build a companion for your project. See [setup](bridge/docs/AUTOMATIC-RUNTIME.md). Vanilla batch diagnostics need no extender.
+- Optional: NVSE for `geck_launch(via_nvse=true)`. PyFFI for sprite tools installs with `bridge/requirements.lock.txt`.
 
 ## Safety
 
@@ -59,7 +60,8 @@ fights the player in game.
 
 ## Status and roadmap
 
-v0.2 is a portfolio/prototype release. 0.2.0 fixed what broke while building a real mod on Windows: tools now work
+v0.3.0 adds runtime diagnostics to the existing bridge server and remains a prototype release.
+The v0.2 series fixed what broke while building a real mod on Windows: tools now work
 through Claude's Cowork device proxy, hidden GECK windows are restored, stale recovery barriers clear themselves after
 a GECK restart, and the Render Window can be captured on Windows. Next steps: a GECK Extender pass, running the
 `windows/` server against the FNV GECK, a Linux/Proton test, DLC masters, and one combined installer. See

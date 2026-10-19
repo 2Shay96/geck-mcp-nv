@@ -138,3 +138,30 @@ Raw evidence stays in the separate local test project's ignored state. Updated
 public validation docs; no merge, version change, tag or Nexus release performed.
 
 Next action: review/authorize release-plan step 2 (merge PR #3, then PR #4 into main).
+
+
+## 19 October 2026 - 0.3.0 source download prepared (not published)
+
+Prepared codex/release-0.3.0 from merged main. Aligned bridge module/metadata and
+README to 0.3.0; the optional Windows port retains its independent 0.1.0.dev0.
+Added upgrade instructions and a reproducible committed-source exporter with
+archive boundary tests. Excludes local profiles/state, coordination docs, all
+executables and game-derived fixtures plus their five dependent test modules.
+Inspection caught an omitted nested third-party licence; fixed it and archived
+the rejected candidate under the sibling _to_delete folder before rebuilding.
+
+Checked checkout: 201 bridge tests (197 pass, 4 skip), 6 ESP, 23 Windows-port;
+all 8 companion tests pass with pinned Zig, including generated 32-bit DLL runs.
+Final archive pins source 8d8aacc39f43e999e9274a347de0a6dd60d6c0a4:
+100 files, 286227 bytes, SHA256
+3c2005c4f74b04dfe80d89221aeaa3b896bcb85857c31de6f563d09d4fd3937b.
+Fresh extraction: CRC/hash/contents/licences pass; extracted C# helper builds;
+146 bridge tests (143 pass, 3 platform skips, native DLL exercised), 6 ESP and
+23 Windows-port pass. Fresh extracted stdio server reports 0.3.0 and 31 tools.
+Tests reused the existing locked dependency environment; no clean pip install
+or additional game acceptance was performed for this packaging-only change.
+Runtime code is unchanged from the already accepted merged feature.
+
+Local archive/manifest and extraction evidence are in the sibling release kit;
+no game/workshop files changed. No tag, GitHub release or Nexus upload.
+Next action: review the release-preparation PR before merging or publishing.
