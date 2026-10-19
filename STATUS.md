@@ -165,3 +165,28 @@ Runtime code is unchanged from the already accepted merged feature.
 Local archive/manifest and extraction evidence are in the sibling release kit;
 no game/workshop files changed. No tag, GitHub release or Nexus upload.
 Next action: review the release-preparation PR before merging or publishing.
+
+
+## 19 October 2026 - authorized 0.3.0 publication
+
+Owner authorized release preparation/tagging/publication and requested a GitHub
+link on Nexus. All four merged-main CI jobs passed in run 39270784520. Created
+and pushed annotated v0.3.0 at dfcb20adf57b279008f21a9e0356b901669315e8.
+Published GitHub release with the checked source-only ZIP:
+https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0
+GitHub reports the exact expected asset size (286227 bytes) and SHA256
+3c2005c4f74b04dfe80d89221aeaa3b896bcb85857c31de6f563d09d4fd3937b.
+
+Updated existing Nexus mod 99851, not a duplicate page. Primary main file 0.3.0
+is file ID 1000183372; the previous 0.2.1 file was archived, not deleted. Disabled
+mod-manager installation for this source toolkit (extract outside Data). Added
+changelog/setup requirements and saved the page version/description. Public
+page verifies 31 tools and: 'GitHub gets updates first as development continues,
+so you may find a newer development version there than on Nexus.' GitHub link
+and automatic runtime setup/limits links are present. Nexus initially holds the
+uploaded file for virus scanning; this is separate from upload success.
+
+Updated main's public release links/status. Runtime code/archive are unchanged;
+no new gameplay acceptance required. Existing dirty coordination docs preserved;
+workshop and game untouched. Publication evidence/receipts remain in the local
+sibling nexus kit. Next action: confirm Nexus scan/download availability.

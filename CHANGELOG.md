@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0: runtime diagnostics (2026-10-19; Nexus upload pending)
+## 0.3.0: runtime diagnostics (2026-10-19)
 
 - Add optional read-only xNVSE companion with generated single-quest profiles,
   guarded install/build binding, runtime-resolved load index, process/module/load

@@ -4,7 +4,9 @@
 diagnostics into the existing `geck` server (31 tools). There is no second MCP
 server to register for runtime diagnostics. The experimental `windows/` server
 is still a separate, optional port; its own package version remains 0.1.0.dev0.
-The Nexus main file remains 0.2.1 until an approved upload.
+Version 0.3.0 is published on [Nexus](https://www.nexusmods.com/newvegas/mods/99851?tab=files)
+and [GitHub](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0).
+GitHub main receives development updates before the next packaged Nexus release.
 
 ## Upgrade from 0.2.1
 

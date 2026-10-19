@@ -1,6 +1,6 @@
 # GECK MCP for New Vegas: WIP prototype (v0.3.0)
 
-The source is version **0.3.0**. The [Nexus download](https://www.nexusmods.com/newvegas/mods/99851?tab=files) remains **0.2.1** until a separately approved upload. See [upgrading and release checks](docs/RELEASING.md).
+Current release: **0.3.0** on [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files) and [GitHub Releases](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0). GitHub gets development updates first, so main may be newer than the Nexus download. See [upgrading and release checks](docs/RELEASING.md).
 
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 
