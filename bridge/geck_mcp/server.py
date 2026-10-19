@@ -89,6 +89,19 @@ def make_server(project, service=None):
                                  runtime_mapping=runtime_mapping.model_dump(), expected_plugin_hash=expected_plugin_hash,
                                  preview=preview), request_key)
 
+    @server.tool(annotations=observe)
+    async def geck_runtime_snapshot(profile: RuntimeProfile, expected_plugin_hash: Hash) -> Result:
+        """Read automatic quest telemetry from the optional installed xNVSE companion. No console commands,
+        screen control, gameplay writes or GECK attachment. Rejects stale/missing data or identity/build mismatch."""
+        return await invoke(service.runtime_snapshot,profile.model_dump(),expected_plugin_hash)
+
+    @server.tool(annotations=observe)
+    async def geck_runtime_compare(profile: RuntimeProfile, expected_plugin_hash: Hash,
+                                   baseline: dict[str, Any]) -> Result:
+        """Compare a returned automatic snapshot to fresh data; refuses a different process, save/load epoch,
+        plugin/companion build or profile. Missing observations never become zero or pass."""
+        return await invoke(service.runtime_snapshot,profile.model_dump(),expected_plugin_hash,baseline)
+
     @server.tool(annotations=ui)
     async def geck_runtime_collect(runtime_session: str, checkpoint_label: str) -> Result:
         """Collect one fresh batch cycle promptly, or return awaiting_output. Explicit checkpoint labels;

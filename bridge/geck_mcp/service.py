@@ -38,6 +38,8 @@ CAPABILITIES = {
         'geck_runtime_collect': {'effect': 'bounded log read; write local checkpoint/report; no editor lock'},
         'geck_runtime_report': {'effect': 'replay local report; optional sanitized export'},
         'geck_runtime_close': {'effect': 'stop collection; archive unchanged owned helpers after game exit; does not stop SCOF'},
+        'geck_runtime_snapshot': {'effect': 'read verified fresh automatic telemetry', 'adapter': 'optional native Windows xNVSE 6.4.9+ companion; quest variables only'},
+        'geck_runtime_compare': {'effect': 'read fresh automatic telemetry and compare within one process/load/build/profile'},
         'geck_inspect_windows': {'effect': 'observe', 'scope': 'bounded GECK control inventory'},
         'geck_show_windows': {'effect': 'show hidden Object Window, Cell View and Render Window (no clicks)'},
         'geck_project_attach': {'effect': 'observe'},
@@ -97,6 +99,12 @@ def make_transport(project):
 
 
 class Service:
+    def runtime_snapshot(self, profile, expected_plugin_hash, baseline=None):
+        """Read-only automatic runtime observation; never attaches to GECK or holds its lock."""
+        from .runtime_companion import snapshot
+        return self._envelope('geck_runtime_compare' if baseline is not None else 'geck_runtime_snapshot',
+                              time.monotonic(),lambda: snapshot(self.project,profile,expected_plugin_hash,baseline))
+
     def runtime_call(self, mode, args, request_key=None):
         """Runtime operations have a separate per-install lock/journal namespace.
 

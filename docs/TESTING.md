@@ -1,5 +1,42 @@
 # Testing log
 
+## 19 October 2026 - generalized companion live acceptance
+
+The public generated companion passed in-game acceptance, with the project-specific
+precursor DLL archived before launch. A fresh main stdio server exposed 31 tools;
+geck_runtime_snapshot and geck_runtime_compare plus the shared CLI verified actual
+process/module/profile/build identity and a game-resolved runtime index. All four
+configured rules passed: initialized quest, driving active, zero speed error and
+zero idle fuel waste. Speed was 250; fuel stayed 99.87500762939453 over two seconds.
+A fresh stopped-state MCP/CLI check confirmed speed 100, SpeedDelta/SpeedApplied
+zero, and a comparison against the driving baseline returned Driving -1 and speed
+-150. A wrong expected build hash returned a structured error with no observations.
+
+The local acceptance harness initially required a full tank of exactly 100, which
+was stricter than the gameplay requirement: moving to the panel consumed some fuel.
+The captured idle delta was already zero. Corrected the local harness to require
+positive fuel and zero idle consumption, retained the first capture, and reran
+MCP/CLI acceptance successfully. No public runtime code or test expectations were
+weakened, and no extra game commands or screen control were used.
+
+
+## 18 October 2026 - optional automatic xNVSE diagnostics
+
+- Bridge: 197 tests ran, 193 passed / 4 skipped (three existing platform skips and
+  optional native compilation). ESP verifier: 6 passed; Windows-port: 23 passed.
+- Separate Windows native suite with GECK_MCP_ZIG: all 8 companion tests passed,
+  including compilation and execution of the generated 32-bit DLL in six fake-host
+  modes, plus load failure/epoch/exit and bounded compile-cache checks.
+- Fresh stdio main-server discovery exposes 31 tools. Both new tools report
+  structured unavailable errors without a configured/loaded companion. Portable
+  service tests cover positive reads, rule failures/pass, deltas, malformed/stale
+  data, process/load/build mismatch and guarded installation/backup/rebinding.
+- The project-specific precursor passed live CLI/fresh stdio MCP diagnostics and
+  source-fix regression on Windows/xNVSE 6.4.9: speed 60 -> 250, idle fuel drain
+  1.5 per 1.5 seconds -> zero over two seconds. The generalized public adapter has
+  native fake-host coverage, not a separate in-game acceptance pass. No game assets,
+  saves, raw logs or local profiles are included. See bridge/docs/AUTOMATIC-RUNTIME.md.
+
 ## 18 October 2026 - runtime diagnostics (offline)
 
 - Bridge suite: 189 tests, 186 passed / 3 skipped; 20 new synthetic runtime tests.

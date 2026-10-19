@@ -95,3 +95,46 @@ GECK actions, screen control, gameplay automation or plugin/save modifications.
 
 Next action: push the scoped feature branch, open/attach its PR and verify all four
 required CI jobs; wait for explicit approval before merge, tags or Nexus publication.
+
+
+## 18 October 2026 - automatic xNVSE runtime companion prepared for review
+
+User authorized committing/pushing the automatic capability proven in a disposable
+local debug mod. Generalized it into a source-only optional Windows xNVSE 6.4.9+
+companion, strict generated one-quest profiles, guarded installation/build binding,
+automatic OS/process/module/load identity, fresh complete snapshots and comparisons.
+Added shared CLI plus two main-server MCP tools (31 total), documentation and
+Windows CI native DLL tests with a hash-verified official Zig compiler. No toy mod,
+game assets, saves, raw evidence, private workshop edits or desktop config included.
+
+Checks: 197 bridge tests ran / 193 passed / 4 skipped; separate native suite all
+8 passed, exercising the actual generated 32-bit DLL in six fake xNVSE host modes.
+ESP verifier 6 passed, Windows-port 23 passed, fresh stdio protocol 4 passed.
+The precursor passed live automatic CLI/MCP failure -> source fix -> regression
+(speed 60 -> 250; parked fuel drain -> zero). The generalized public adapter
+still needs a separate in-game acceptance run and is explicitly experimental.
+
+Pre-existing HANDOFF.md/MCPworkflow.md/STATUS.md edits preserved. Work is on
+codex/automatic-runtime, based on codex/runtime-diagnostics (PR #3); no merge,
+tag or Nexus release authorized. Next action: push checked scoped commit and
+open a dependent PR for review, then verify CI.
+
+
+## 19 October 2026 - generalized automatic companion live acceptance passed
+
+Executed release-plan step 1 against the public generated companion with the
+prototype archived. Fresh main-server stdio MCP (31 tools) and shared CLI both
+verified current process/module/profile/build identity and runtime-resolved index.
+Driving speed=expected=250, idle fuel used=0, fuel unchanged across two seconds,
+initialized=1; all four rules passed. Later stopped samples showed speed 100 and
+SpeedDelta/SpeedApplied zero; driving-to-stop comparison returned expected deltas.
+A deliberately wrong expected build hash returned an error with no observations.
+
+The ignored local harness initially assumed Fuel must equal 100; it correctly
+failed because moving to the panel used a little fuel. Preserved that capture,
+changed the harness to require positive fuel plus zero parked consumption, and
+reran successfully. No public runtime source changed or test was weakened.
+Raw evidence stays in the separate local test project's ignored state. Updated
+public validation docs; no merge, version change, tag or Nexus release performed.
+
+Next action: review/authorize release-plan step 2 (merge PR #3, then PR #4 into main).
