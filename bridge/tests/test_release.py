@@ -26,6 +26,7 @@ class ReleaseTests(unittest.TestCase):
         for name, data in {
             'README.md': b'# Test (v0.3.0)',
             'LICENSE': b'Synthetic licence',
+            'windows/LICENSE': b'Synthetic third-party licence',
             'bridge/pyproject.toml': b'[project]\nversion="0.3.0"\n',
             'bridge/geck_mcp/__init__.py': b'__version__="0.3.0"\n',
             'bridge/native/runtime/companion.c': b'/* synthetic source */',
@@ -57,7 +58,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(z.read(release.PREFIX + 'README.md'), b'# Test (v0.3.0)')
             self.assertEqual(set(z.namelist()), {release.PREFIX + p for p in (
                 'README.md', 'LICENSE', 'bridge/pyproject.toml', 'bridge/geck_mcp/__init__.py',
-                'bridge/native/runtime/companion.c', 'bridge/projects/example-windows.json')})
+                'bridge/native/runtime/companion.c', 'bridge/projects/example-windows.json',
+                'windows/LICENSE')})
         self.assertEqual(manifest, json.loads(output.with_suffix('.json').read_text()))
         self.assertEqual(manifest['sourceCommit'], self.git('rev-parse', 'HEAD').decode().strip())
 

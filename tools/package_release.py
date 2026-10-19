@@ -32,7 +32,7 @@ def included(name):
         return False
     if p.parts[:2] == ('bridge', 'projects') and not p.name.startswith('example-'):
         return False
-    return p.suffix in SOURCE_SUFFIXES
+    return p.name == 'LICENSE' or p.suffix in SOURCE_SUFFIXES
 
 
 def git(repo, *args):
