@@ -1,6 +1,10 @@
-# GECK MCP for New Vegas: WIP prototype (v0.4.0)
+# GECK MCP for New Vegas — 0.4.0 Beta
 
-**0.4.0 beta 1** adds resumable compilation and opt-in in-game console tools. Windows live console acceptance passed; larger GECK workloads and controlled Shadow-session gates remain open. This is a beta, not a stable-release claim.
+**0.4.0 Beta is a major upgrade:** the bundled companion source lets your AI agent **enter in-game console commands** and **query live mod indices/load-order prefixes with GetModIndex**, including explicitly named loaded plugins. Typed inventory and equipped-condition readback help verify effects; resumable compilation improves the editor workflow.
+
+**Still in Beta:** Windows live tests passed, but broader GECK workloads and remote-session validation remain open. Use disposable plugins and saves.
+
+**Source-only download: no precompiled DLL or EXE.** Your AI agent can follow [local setup and compilation](docs/SOURCE-SETUP.md) to build the helper and optional xNVSE companion. [Download 0.4.0 Beta](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.4.0-beta.1).
 
 Previous stable prototype: **0.3.0** on [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files) and [GitHub Releases](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0). GitHub gets development updates first, so main may be newer than the Nexus download. See [upgrading and release checks](docs/RELEASING.md).
 
@@ -94,10 +98,10 @@ variables; item counts and reference state use vanilla manual batches. Setup
 preflight previews exact files/backups and restart checks. No compiler download,
 DLL install or console command runs without an explicit request.
 
-## Owner-requested console execution (23 October)
+## In-game console companion (0.4.0 Beta)
 
-The v0.4.0 candidate now includes separate opt-in `geck_console_readiness`,
-`geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
+The bundled companion source provides opt-in `geck_console_setup`, `geck_console_readiness`,
+`geck_console_query`, `geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
 Read-only telemetry is unchanged. See [console setup, commands and outcome semantics](bridge/docs/CONSOLE-COMMANDS.md).
 Real FNV console smoke acceptance passed; broader GECK/Shadow gates remain
-pending, so this candidate is not release-ready.
+pending. This published version remains Beta.
