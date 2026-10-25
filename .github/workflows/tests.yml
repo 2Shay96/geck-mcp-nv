@@ -38,6 +38,11 @@ jobs:
         run: python -m unittest discover -s tests -p test_runtime_companion.py -v
         env:
           GECK_MCP_ZIG: '${{ github.workspace }}\bridge\state\zig-ci\zig-x86_64-windows-0.14.1\zig.exe'
+      - name: Exercise opt-in console actuator under fake xNVSE host
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -p test_console.py -v
+        env:
+          GECK_MCP_ZIG: '${{ github.workspace }}\bridge\state\zig-ci\zig-x86_64-windows-0.14.1\zig.exe'
   windows-port:
     runs-on: windows-latest
     defaults:

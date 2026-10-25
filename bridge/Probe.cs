@@ -22,8 +22,8 @@ class Probe {
     [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr h);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
-    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
-    [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW")] static extern IntPtr TextMessage(IntPtr h, uint m, IntPtr w, StringBuilder l, uint flags, uint ms, out IntPtr result);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW",SetLastError=true)] static extern IntPtr TextMessage(IntPtr h, uint m, IntPtr w, StringBuilder l, uint flags, uint ms, out IntPtr result);
     [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageTimeoutW")] static extern IntPtr SetTextMessage(IntPtr h, uint m, IntPtr w, string l, uint flags, uint ms, out IntPtr result);
     [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32.dll")] static extern IntPtr VirtualAllocEx(IntPtr p, IntPtr a, UIntPtr n, uint type, uint protect);
@@ -98,7 +98,7 @@ class Probe {
     static uint target;
     static readonly List<WindowInfo> windows=new List<WindowInfo>();
     static string J(string s) { if(s==null)return "null";var b=new StringBuilder("\"");foreach(char c in s){if(c=='\\')b.Append("\\\\");else if(c=='\"')b.Append("\\\"");else if(c=='\r')b.Append("\\r");else if(c=='\n')b.Append("\\n");else if(c=='\t')b.Append("\\t");else if(c<32||c>126)b.Append("\\u"+((int)c).ToString("x4"));else b.Append(c);}b.Append('\"');return b.ToString(); }
-    static long Msg(IntPtr h,uint m,IntPtr w,IntPtr l) { IntPtr r; if(SendMessageTimeout(h,m,w,l,2,TimeoutMs,out r)==IntPtr.Zero)throw new Exception("message timed out or failed"); return r.ToInt64(); }
+    static long Msg(IntPtr h,uint m,IntPtr w,IntPtr l) { IntPtr r; if(SendMessageTimeout(h,m,w,l,2,TimeoutMs,out r)==IntPtr.Zero)throw new Exception("message timed out or failed; apiError="+Marshal.GetLastWin32Error()+" hwnd="+h.ToInt64()+" session="+Session()); return r.ToInt64(); }
     static string Text(IntPtr h) { var b=new StringBuilder(2048); IntPtr r; if(TextMessage(h,13,(IntPtr)b.Capacity,b,2,TimeoutMs,out r)==IntPtr.Zero)throw new Exception("WM_GETTEXT timed out or failed"); return b.ToString(); }
     static string Class(IntPtr h) { var b=new StringBuilder(256); GetClassName(h,b,b.Capacity); return b.ToString(); }
     static bool AddWindow(IntPtr h,IntPtr parent) { uint pid; GetWindowThreadProcessId(h,out pid); if(pid!=target)return true; string text; try{text=Text(h);}catch{text="<unavailable>";} windows.Add(new WindowInfo{Handle=h,Parent=parent,ActualParent=GetAncestor(h,1),Owner=GetWindow(h,4),Enabled=IsWindowEnabled(h),ClassName=Class(h),Text=text,Id=GetDlgCtrlID(h),Visible=IsWindowVisible(h)}); return true; }
@@ -163,7 +163,7 @@ class Probe {
         try{if(memory==IntPtr.Zero)throw new Exception("item-bounds allocation failed");byte[] data=new byte[16];Array.Copy(BitConverter.GetBytes(0),0,data,0,4);UIntPtr n;if(!WriteProcessMemory(process,memory,data,(UIntPtr)data.Length,out n))throw new Exception("item-bounds write failed");try{if(Msg(list.Handle,0x100E,(IntPtr)row,memory)==0)throw new Exception("LVM_GETITEMRECT failed");}catch{safe=false;throw;}if(!ReadProcessMemory(process,memory,data,(UIntPtr)data.Length,out n))throw new Exception("item-bounds read failed");return new RECT{Left=BitConverter.ToInt32(data,0),Top=BitConverter.ToInt32(data,4),Right=BitConverter.ToInt32(data,8),Bottom=BitConverter.ToInt32(data,12)};}
         finally{if(memory!=IntPtr.Zero&&safe)VirtualFreeEx(process,memory,UIntPtr.Zero,0x8000);CloseHandle(process);}
     }
-    static string WindowJson(WindowInfo w) { return "{\"handle\":"+w.Handle.ToInt64()+",\"parentHandle\":"+w.Parent.ToInt64()+",\"id\":"+w.Id+",\"class\":"+J(w.ClassName)+",\"visible\":"+w.Visible.ToString().ToLower()+",\"text\":"+J(w.Text)+",\"actualParent\":"+w.ActualParent.ToInt64()+",\"owner\":"+w.Owner.ToInt64()+",\"enabled\":"+w.Enabled.ToString().ToLower()+"}"; }
+    static string WindowJson(WindowInfo w) { uint pid;uint thread=GetWindowThreadProcessId(w.Handle,out pid); return "{\"pid\":"+pid+",\"uiThread\":"+thread+",\"minimized\":"+IsIconic(w.Handle).ToString().ToLower()+",\"handle\":"+w.Handle.ToInt64()+",\"parentHandle\":"+w.Parent.ToInt64()+",\"id\":"+w.Id+",\"class\":"+J(w.ClassName)+",\"visible\":"+w.Visible.ToString().ToLower()+",\"text\":"+J(w.Text)+",\"actualParent\":"+w.ActualParent.ToInt64()+",\"owner\":"+w.Owner.ToInt64()+",\"enabled\":"+w.Enabled.ToString().ToLower()+"}"; }
     static string Result(bool ok,string operation,string before,string after,long elapsed,string error) { return "{\"ok\":"+ok.ToString().ToLower()+",\"operation\":"+J(operation)+",\"target\":\"GECK\",\"before\":"+(before??"null")+",\"after\":"+(after??"null")+",\"elapsedMs\":"+elapsed+",\"error\":"+J(error)+",\"worker\":"+WorkerJson(elapsed)+"}"; }
     static string Status() {
         var clock=Stopwatch.StartNew();var marks=new StringBuilder();
@@ -176,7 +176,7 @@ class Probe {
     // ---- GECK's three editor panes (Object Window, Cell View, Render Window) --------------------------
     // On native Windows GECK can leave all three hidden after loading a plugin (seen 4-5 Oct 2026, Windows 11),
     // which breaks Cell View checks and the Render Window. status reports them; windows.show shows them again.
-    static readonly string[][] EditorPanes={new[]{"objectWindow","FaceClass","Object Window"},new[]{"cellView","ViewerClass","Cell View"},new[]{"renderWindow","MonitorClass",null}};
+    static readonly string[][] EditorPanes={new[]{"mainWindow","Garden of Eden Creation Kit",null},new[]{"objectWindow","FaceClass","Object Window"},new[]{"cellView","ViewerClass","Cell View"},new[]{"renderWindow","MonitorClass",null}};
     static List<WindowInfo> PaneMatches(string cls,string title) {
         var all=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.ClassName==cls&&IsWindow(w.Handle));
         if(all.Count>1&&title!=null)all=all.FindAll(w=>w.Text==title);
@@ -186,14 +186,14 @@ class Probe {
         var m=PaneMatches(pane[1],pane[2]);
         if(m.Count!=1)return J(pane[0])+":{\"found\":false,\"matches\":"+m.Count+",\"visible\":false,\"reachable\":false}";
         var w=m[0];RECT r;GetClientRect(w.Handle,out r);int cw=r.Right-r.Left,ch=r.Bottom-r.Top;bool visible=IsWindowVisible(w.Handle),iconic=IsIconic(w.Handle);
-        bool reachable=visible&&!iconic&&cw>0&&ch>0&&w.Text!="<unavailable>";
+        bool reachable=visible&&!iconic&&IsWindowEnabled(w.Handle)&&cw>0&&ch>0&&w.Text!="<unavailable>";
         return J(pane[0])+":{\"found\":true,\"handle\":"+w.Handle.ToInt64()+",\"class\":"+J(w.ClassName)+",\"title\":"+J(w.Text)+",\"visible\":"+visible.ToString().ToLower()+",\"minimized\":"+iconic.ToString().ToLower()+",\"client\":["+cw+","+ch+"],\"reachable\":"+reachable.ToString().ToLower()+"}";
     }
-    static string EditorWindows() {var parts=new List<string>();foreach(var pane in EditorPanes)parts.Add(PaneJson(pane));return "{"+String.Join(",",parts.ToArray())+"}";}
-    static bool PanesHidden() {foreach(var pane in EditorPanes){var m=PaneMatches(pane[1],pane[2]);if(m.Count==1&&(!IsWindowVisible(m[0].Handle)||IsIconic(m[0].Handle)))return true;}return false;}
+    static string EditorWindows() {var parts=new List<string>();foreach(var pane in EditorPanes)parts.Add(PaneJson(pane));foreach(var modal in windows)if(modal.Parent==IntPtr.Zero&&modal.Owner!=IntPtr.Zero&&modal.ClassName=="#32770")parts.Add(J("modal:"+modal.Handle.ToInt64())+":"+WindowJson(modal));return "{"+String.Join(",",parts.ToArray())+"}";}
+    static bool PanesHidden() {foreach(var modal in windows)if(modal.Parent==IntPtr.Zero&&modal.Owner!=IntPtr.Zero&&modal.ClassName=="#32770"&&(!IsWindowVisible(modal.Handle)||IsIconic(modal.Handle)))return true;foreach(var pane in EditorPanes){var m=PaneMatches(pane[1],pane[2]);if(m.Count!=1||!IsWindowVisible(m[0].Handle)||IsIconic(m[0].Handle))return true;}return false;}
     static string WindowsShow(out string before) {
         var main=MainWindow();before=EditorWindows();
-        if(main.Text=="<unavailable>"||!IsWindowEnabled(main.Handle))throw new Exception("GECK main window is busy or disabled (still loading, or a modal dialog is open); not showing windows");
+        if(main.Text=="<unavailable>")throw new Exception("GECK main window is busy or disabled (still loading, or a modal dialog is open); not showing windows");
         string selfRestored="false";
         if(PanesHidden()){
             // First a harmless nudge (WM_NULL): if GECK only waits for a message to restore its panes, it does it itself.
@@ -206,6 +206,7 @@ class Probe {
             if(!IsWindowVisible(h)){ShowWindow(h,8);shown.Add(J(pane[0]));}       // SW_SHOWNA: keep size, no activation
             if(IsIconic(h)){ShowWindow(h,4);if(!shown.Contains(J(pane[0])))shown.Add(J(pane[0]));}   // SW_SHOWNOACTIVATE restores a minimised pane
             if(pane[1]=="MonitorClass")InvalidateRect(h,IntPtr.Zero,true);}
+        foreach(var modal in windows)if(modal.Parent==IntPtr.Zero&&modal.Owner!=IntPtr.Zero&&modal.ClassName=="#32770"){ShowWindow(modal.Handle,4);}
         var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<2000&&PanesHidden())System.Threading.Thread.Sleep(100);
         Discover();
         return "{\"shown\":["+String.Join(",",shown.ToArray())+"],\"selfRestoredAfterNudge\":"+selfRestored+",\"allVisible\":"+(!PanesHidden()).ToString().ToLower()+",\"windows\":"+EditorWindows()+"}";
@@ -216,14 +217,28 @@ class Probe {
     static string FilterSet(string value,out string before) { var filter=Unique("object filter","Edit",2557,"FaceClass"); var list=Unique("object list","SysListView32",1041,"FaceClass"); var tree=Unique("category tree","SysTreeView32",2093,"FaceClass"); before=FilterState(filter,list,tree); SetText(filter,value); if(Text(filter.Handle)!=value)throw new Exception("filter readback did not match requested text"); int previous=-1,stable=0,current=-1; var wait=Stopwatch.StartNew(); while(wait.ElapsedMilliseconds<3000){ current=Count(list); if(current==previous)stable++;else stable=0; if(stable>=5&&wait.ElapsedMilliseconds>=750)break; previous=current; System.Threading.Thread.Sleep(100); } if(stable<5)throw new Exception("object list did not stabilize within 3000 ms"); return FilterState(filter,list,tree); }
     static void WaitListStable(WindowInfo list) { int previous=-1,stable=0; var wait=Stopwatch.StartNew(); while(wait.ElapsedMilliseconds<3000){int current=Count(list);stable=current==previous?stable+1:0;previous=current;if(stable>=5&&wait.ElapsedMilliseconds>=750)return;System.Threading.Thread.Sleep(100);}throw new Exception("object list did not stabilize within 3000 ms"); }
     static string CategorySelect(string path,out string before) { var tree=Unique("category tree","SysTreeView32",2093,"FaceClass");var list=Unique("object list","SysListView32",1041,"FaceClass");IntPtr old=(IntPtr)Msg(tree.Handle,0x110A,(IntPtr)9,IntPtr.Zero);before="{\"path\":"+J(TreePath(tree,old))+"}";IntPtr root=TreeRelated(tree,0,IntPtr.Zero),found;if(!FindTreePath(tree,root,PathParts(path),0,out found))throw new Exception("category path not found: "+path);if(Msg(tree.Handle,0x110B,(IntPtr)9,found)==0)throw new Exception("TVM_SELECTITEM failed");WaitListStable(list);IntPtr selected=(IntPtr)Msg(tree.Handle,0x110A,(IntPtr)9,IntPtr.Zero);if(selected!=found)throw new Exception("category selection readback did not match");return "{\"path\":"+J(TreePath(tree,selected))+",\"listCount\":"+Count(list)+"}"; }
-    static int FindObjectRow(WindowInfo list,string editorId) { int count=Count(list),match=-1;for(int i=0;i<count;i++){if(ListCell(list,i)==editorId){if(match!=-1)throw new Exception("duplicate exact object rows: "+editorId);match=i;}}return match; }
+    static int FindObjectRow(WindowInfo list,string editorId) {
+        // Native exact search avoids one cross-process allocation/read per row.
+        IntPtr process=OpenProcess(0x38,false,target);if(process==IntPtr.Zero)throw new Exception("OpenProcess failed for native list search");
+        byte[] text=Encoding.Unicode.GetBytes(editorId+"\0");IntPtr memory=VirtualAllocEx(process,IntPtr.Zero,(UIntPtr)(32+text.Length),0x3000,4);bool safe=true;
+        try {
+            if(memory==IntPtr.Zero)throw new Exception("list search allocation failed");
+            byte[] find=new byte[24];Array.Copy(BitConverter.GetBytes(2),0,find,0,4);Array.Copy(BitConverter.GetBytes(memory.ToInt32()+32),0,find,4,4);UIntPtr written;
+            if(!WriteProcessMemory(process,memory,find,(UIntPtr)find.Length,out written)||written.ToUInt64()!=(ulong)find.Length||!WriteProcessMemory(process,(IntPtr)(memory.ToInt32()+32),text,(UIntPtr)text.Length,out written)||written.ToUInt64()!=(ulong)text.Length)throw new Exception("native list search write failed");
+            int row,next;try{row=checked((int)Msg(list.Handle,0x1053,(IntPtr)(-1),memory));next=row<0?-1:checked((int)Msg(list.Handle,0x1053,(IntPtr)row,memory));}catch{safe=false;throw;}
+            if(row>=0){if(next>=0)throw new Exception("ambiguous native list identity: "+editorId);if(ListCell(list,row)!=editorId)throw new Exception("native list identity readback differs");return row;}
+        }finally{if(memory!=IntPtr.Zero&&safe)VirtualFreeEx(process,memory,UIntPtr.Zero,0x8000);CloseHandle(process);}
+        int count=Count(list),match=-1;var budget=Stopwatch.StartNew();
+        for(int i=0;i<count;i++){if(budget.ElapsedMilliseconds>5000)throw new Exception("fallback list search budget exceeded; identity unknown");if(ListCell(list,i)==editorId){if(match!=-1)throw new Exception("duplicate exact object rows: "+editorId);match=i;}}
+        return match;
+    }
     static string ObjectsFind(string editorId) { var list=Unique("object list","SysListView32",1041,"FaceClass");var tree=Unique("category tree","SysTreeView32",2093,"FaceClass");int row=FindObjectRow(list,editorId);return "{\"editorId\":"+J(editorId)+",\"found\":"+(row>=0).ToString().ToLower()+",\"row\":"+(row>=0?row.ToString():"null")+",\"category\":"+J(TreePath(tree,(IntPtr)Msg(tree.Handle,0x110A,(IntPtr)9,IntPtr.Zero)))+",\"listCount\":"+Count(list)+"}"; }
     static int SelectedRow(WindowInfo list) { return checked((int)Msg(list.Handle,0x100C,(IntPtr)(-1),(IntPtr)2)); }
     static void SetListState(WindowInfo list,int row,uint state,uint mask) { IntPtr process=OpenProcess(0x38,false,target);if(process==IntPtr.Zero)throw new Exception("OpenProcess failed for object selection");IntPtr memory=VirtualAllocEx(process,IntPtr.Zero,(UIntPtr)64,0x3000,4);bool safe=true;try{if(memory==IntPtr.Zero)throw new Exception("selection buffer allocation failed");byte[] item=new byte[60];Array.Copy(BitConverter.GetBytes(state),0,item,12,4);Array.Copy(BitConverter.GetBytes(mask),0,item,16,4);UIntPtr n;if(!WriteProcessMemory(process,memory,item,(UIntPtr)item.Length,out n))throw new Exception("selection buffer write failed");try{Msg(list.Handle,0x102B,(IntPtr)row,memory);}catch{safe=false;throw;}}finally{if(memory!=IntPtr.Zero&&safe)VirtualFreeEx(process,memory,UIntPtr.Zero,0x8000);CloseHandle(process);} }
     static int ListState(WindowInfo list,int row,int mask) { return checked((int)Msg(list.Handle,0x102C,(IntPtr)row,(IntPtr)mask)); }
     static void SetChecked(WindowInfo list,int row,bool value) { uint state=value?0x2000u:0x1000u;SetListState(list,row,state,0xF000);if(ListState(list,row,0xF000)!=(int)state)throw new Exception("list checkbox readback failed for row "+row); }
     static string ObjectSelect(string editorId,out string before) { var list=Unique("object list","SysListView32",1041,"FaceClass");int old=SelectedRow(list);before="{\"row\":"+(old>=0?old.ToString():"null")+",\"editorId\":"+(old>=0?J(ListCell(list,old)):"null")+"}";int row=FindObjectRow(list,editorId);if(row<0)throw new Exception("object not found in current category/list: "+editorId);SetListState(list,-1,0,3);SetListState(list,row,3,3);int selected=SelectedRow(list);if(selected!=row||ListCell(list,selected)!=editorId)throw new Exception("object selection readback did not match");return "{\"row\":"+selected+",\"editorId\":"+J(ListCell(list,selected))+",\"selected\":true}"; }
-    static string TopWindows() {var rows=new List<string>();foreach(var w in windows)if(w.Parent==IntPtr.Zero&&w.Visible)rows.Add(WindowJson(w));return "["+String.Join(",",rows.ToArray())+"]";}
+    static string TopWindows() {var rows=new List<string>();foreach(var w in windows)if(w.Parent==IntPtr.Zero)rows.Add(WindowJson(w));return "["+String.Join(",",rows.ToArray())+"]";}
     static void GuardPlugin() {if(MainWindow().Text.TrimEnd('*')!=ExpectedTitle())throw new Exception("unexpected plugin title: "+MainWindow().Text);}
     static void GuardDialogs() {foreach(var w in windows)if(w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="#32770"&&!IsPreview(w))throw new Exception("blocked by existing dialog: "+w.Text);if(!MainWindow().Enabled)throw new Exception("main window is disabled; possible modal blocker");}
     static uint FindMenuLabel(IntPtr menu,string label) {
@@ -305,30 +320,80 @@ class Probe {
         return "{\"commandId\":"+cmd+",\"top\":"+TopWithChildren()+"}";}
     static WindowInfo OwnedBy(WindowInfo owner,string title){var m=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="#32770"&&w.Owner==owner.Handle&&(title==null||w.Text==title));if(m.Count>1)throw new Exception("multiple owned dialogs: "+title);return m.Count==1?m[0]:null;}
     static string DialogTexts(WindowInfo d){var parts=new List<string>();foreach(var c in windows)if(c.Parent==d.Handle&&(c.ClassName=="Static"||c.ClassName=="Edit")&&!String.IsNullOrEmpty(c.Text))parts.Add(c.Text);return String.Join(" | ",parts.ToArray());}
-    static string ScriptCompile(string editorId,out string before){
-        before="{\"top\":"+TopWindows()+"}";string ignored;ScriptEditorOpen(out ignored);Discover();var editor=ScriptEditor();if(editor==null)throw new Exception("script editor unavailable");
+    static string ScriptPrepare(string editorId,out string before){
+        GuardPlugin();before="{\"top\":"+TopWindows()+"}";string ignored;ScriptEditorOpen(out ignored);Discover();var editor=ScriptEditor();if(editor==null)throw new Exception("script editor unavailable");
         foreach(var w in windows)if(w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="#32770"&&w.Handle!=editor.Handle&&!(w.Owner==editor.Handle&&w.Text=="Select Form")&&!IsPreview(w))throw new Exception("blocked by existing dialog: "+w.Text);
         var select=OwnedBy(editor,"Select Form");
+        if(select==null && Text(editor.Handle).IndexOf("["+editorId+"]",StringComparison.OrdinalIgnoreCase)>=0)return ScriptSource(editorId);
+        if(editor.Text.Contains("*"))throw new Exception("unreviewed dirty script editor; Open refused");
         if(select==null){PostCommand(editor.Handle,ResourceCommand("SCRIPTEDITMENU","&Open..."),IntPtr.Zero);var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<8000&&select==null){System.Threading.Thread.Sleep(150);Discover();select=OwnedBy(editor,"Select Form");}if(select==null)throw new Exception("Select Form dialog did not appear");}
         var lists=windows.FindAll(w=>w.Parent==select.Handle&&w.ClassName=="SysListView32"&&w.Id==1018);if(lists.Count!=1)throw new Exception("script list selector matched "+lists.Count);var list=lists[0];
-        int row=-1,count=Count(list);for(int i=0;i<count;i++)if(ListCell(list,i)==editorId){if(row!=-1)throw new Exception("duplicate script rows: "+editorId);row=i;}
+        int count=Count(list),row=FindObjectRow(list,editorId);
         if(row<0){PostMessage(select.Handle,0x111,(IntPtr)2,IntPtr.Zero);throw new Exception("script not found in Select Form list ("+count+" rows): "+editorId);}
         SetListState(list,-1,0,3);SetListState(list,row,3,3);if(SelectedRow(list)!=row)throw new Exception("script selection readback failed");
         if(!PostMessage(select.Handle,0x111,(IntPtr)1,IntPtr.Zero))throw new Exception("PostMessage IDOK failed");
         var w2=Stopwatch.StartNew();while(w2.ElapsedMilliseconds<8000){System.Threading.Thread.Sleep(150);Discover();if(OwnedBy(editor,"Select Form")==null)break;}
         if(OwnedBy(editor,"Select Form")!=null)throw new Exception("Select Form did not close");
         var edits=windows.FindAll(w=>w.Parent==editor.Handle&&w.ClassName=="RichEdit20A"&&w.Id==1166);if(edits.Count!=1)throw new Exception("script text control matched "+edits.Count);
-        string text=Text(edits[0].Handle);string firstLine=text.Split('\n')[0].Trim();
-        if(firstLine.IndexOf(editorId,StringComparison.OrdinalIgnoreCase)<0)throw new Exception("loaded script text does not start with its name: "+firstLine);
+        string text=FullScriptText(edits[0].Handle);string firstLine=text.Split('\n')[0].Trim();
+        return ScriptSource(editorId);}
+    static string SourceHash(string text) {using(var hash=System.Security.Cryptography.SHA256.Create()){return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(text.Replace("\r\n","\n").Replace("\r","\n")))).Replace("-","").ToLowerInvariant();}}
+    // Unicode WM_GETTEXT is system-marshalled across processes, including RichEdit20A.
+    // Measure before/after, allocate the complete bounded source, and reject partial readback.
+    static string FullScriptText(IntPtr handle) {
+        int length=checked((int)Msg(handle,14,IntPtr.Zero,IntPtr.Zero));
+        if(length<0||length>2*1024*1024)throw new Exception("script source exceeds bounded read limit");
+        var buffer=new StringBuilder(length+2);IntPtr read;
+        if(TextMessage(handle,13,(IntPtr)buffer.Capacity,buffer,2,2000,out read)==IntPtr.Zero)throw new Exception("full source WM_GETTEXT timed out: "+Marshal.GetLastWin32Error());
+        string value=buffer.ToString();int after=checked((int)Msg(handle,14,IntPtr.Zero,IntPtr.Zero));
+        if(length!=after||read.ToInt64()!=value.Length||value.Length!=length)throw new Exception("source changed or truncated during full readback");
+        return value;
+    }
+    static string ScriptSource(string editorId) {
+        var editor=ScriptEditor();if(editor==null)throw new Exception("script editor unavailable");
+        var edits=windows.FindAll(w=>w.Parent==editor.Handle&&w.ClassName=="RichEdit20A"&&w.Id==1166);
+        if(edits.Count!=1)throw new Exception("script text control ambiguous");
+        string text=FullScriptText(edits[0].Handle),line=text.Split('\n')[0].Split(';')[0].Trim();
+        string[] words=line.Split(new[]{' ','\t','\r'},StringSplitOptions.RemoveEmptyEntries);
+        if(words.Length!=2||(words[0].ToLowerInvariant()!="scn"&&words[0].ToLowerInvariant()!="scriptname")||!String.Equals(words[1],editorId,StringComparison.OrdinalIgnoreCase))throw new Exception("script identity mismatch: "+line);
+        return "{\"editorId\":"+J(editorId)+",\"textLength\":"+text.Length+",\"sourceSha256\":"+J(SourceHash(text))+",\"editor\":"+WindowJson(editor)+",\"dirty\":"+editor.Text.Contains("*").ToString().ToLower()+",\"sourceVerified\":true,\"compiled\":false,\"phase\":\"source_verified\"}";
+    }
+    static string ScriptSave(string editorId,string expectedSource,out string before) {
+        GuardPlugin();before=ScriptSource(editorId);var editor=ScriptEditor();
+        // Source read and ownership checks immediately precede dispatch. Never dismiss unknown prompts.
+        GuardChain(editor);
+        var edits=windows.FindAll(w=>w.Parent==editor.Handle&&w.ClassName=="RichEdit20A"&&w.Id==1166);
+        if(SourceHash(FullScriptText(edits[0].Handle))!=expectedSource)throw new Exception("source changed before Save");
+        if(!IsWindowEnabled(editor.Handle))throw new Exception("script editor busy");
         PostCommand(editor.Handle,ResourceCommand("SCRIPTEDITMENU","&Save"),IntPtr.Zero);
-        var errors=new List<string>();var w3=Stopwatch.StartNew();int quiet=0;
-        while(w3.ElapsedMilliseconds<15000){System.Threading.Thread.Sleep(200);Discover();WindowInfo blocker=null;
-            foreach(var w in windows)if(w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="#32770"&&w.Handle!=editor.Handle&&!IsPreview(w)){blocker=w;break;}
-            if(blocker!=null){quiet=0;errors.Add(blocker.Text+": "+DialogTexts(blocker));if(errors.Count>30)throw new Exception("too many compile dialogs");PostMessage(blocker.Handle,0x111,(IntPtr)1,IntPtr.Zero);System.Threading.Thread.Sleep(300);continue;}
-            quiet++;if(quiet>=10)break;}
-        return "{\"editorId\":"+J(editorId)+",\"row\":"+row+",\"firstLine\":"+J(firstLine)+",\"textLength\":"+text.Length+",\"compiled\":"+(errors.Count==0).ToString().ToLower()+",\"errors\":["+JoinJ(errors)+"],\"mainTitle\":"+J(MainWindow().Text)+"}";}
-    static string ScriptEditorClose(out string before){
-        before="{\"top\":"+TopWindows()+"}";var editor=ScriptEditor();if(editor==null)return "{\"closed\":false,\"wasOpen\":false}";
+        return "{\"compiled\":false,\"saveRequested\":true,\"phase\":\"save_requested\",\"next\":\"Reconcile editor then verify saved plugin; no automatic retry\"}";
+    }
+    static string ScriptResolveSave(string editorId,string expectedSource,out string before) {
+        GuardPlugin();before=ScriptSource(editorId);var editor=ScriptEditor();
+        var prompt=OwnedBy(editor,"Save Current Script?");if(prompt==null)throw new Exception("recognized owned Save Current Script prompt not found");
+        GuardChain(editor,prompt);string message=DialogTexts(prompt);
+        if(message.IndexOf("<unavailable>",StringComparison.Ordinal)>=0||!System.Text.RegularExpressions.Regex.IsMatch(message,"(?<![A-Za-z0-9_])"+System.Text.RegularExpressions.Regex.Escape(editorId)+"(?![A-Za-z0-9_])",System.Text.RegularExpressions.RegexOptions.IgnoreCase))throw new Exception("save prompt script identity unreadable or mismatched");
+        var edit=windows.FindAll(w=>w.Parent==editor.Handle&&w.ClassName=="RichEdit20A"&&w.Id==1166);
+        if(edit.Count!=1||SourceHash(FullScriptText(edit[0].Handle))!=expectedSource)throw new Exception("save prompt source hash mismatch");
+        var yes=DialogControl(prompt,"Button",6);if((yes.Text!="&Yes"&&yes.Text!="Yes")||!yes.Enabled)throw new Exception("unrecognized Save Current Script button layout");
+        PostCommand(prompt.Handle,6,yes.Handle);return "{\"resolved\":true,\"compiled\":false,\"phase\":\"busy_dialog_review\"}";
+    }
+    static string ScriptCompile(string editorId,out string before) {
+        string prepared=ScriptPrepare(editorId,out before);
+        // Legacy callers receive provisional status; quiet polling is never compilation proof.
+        return "{\"compiled\":false,\"phase\":\"source_verified\",\"source\":"+prepared+",\"next\":\"Use compile_scripts.py start/resume for durable verification\"}";
+    }
+    static string ScriptEditorClose(string editorId,string expectedSource,out string before){
+        before="{\"top\":"+TopWindows()+"}";var editor=ScriptEditor();if(editor==null){GuardDialogs();return "{\"closed\":true,\"wasOpen\":false}";}
+        GuardChain(editor);
+        if(!String.IsNullOrEmpty(editorId)) {
+            GuardPlugin();ScriptSource(editorId);
+            var edits=windows.FindAll(w=>w.Parent==editor.Handle&&w.ClassName=="RichEdit20A"&&w.Id==1166);
+            if(edits.Count!=1||SourceHash(FullScriptText(edits[0].Handle))!=expectedSource)throw new Exception("source changed before checkpoint close");
+            if(!IsWindowEnabled(editor.Handle)||!MainWindow().Text.EndsWith("*"))throw new Exception("checkpoint close requires enabled editor and plugin mutation evidence");
+            // A lingering title star is not proof of unsaved source. Exit normally;
+            // preserve any prompt, then require saved-plugin semantic verification.
+        } else if(editor.Text.Contains("*"))throw new Exception("unsaved script source requires review; close refused");
         var select=OwnedBy(editor,"Select Form");if(select!=null){PostMessage(select.Handle,0x111,(IntPtr)2,IntPtr.Zero);var w=Stopwatch.StartNew();while(w.ElapsedMilliseconds<5000){System.Threading.Thread.Sleep(150);Discover();if(OwnedBy(editor,"Select Form")==null)break;}}
         Discover();editor=ScriptEditor();if(editor==null)return "{\"closed\":true}";
         PostCommand(editor.Handle,ResourceCommand("SCRIPTEDITMENU","E&xit"),IntPtr.Zero);var w2=Stopwatch.StartNew();
@@ -336,7 +401,7 @@ class Probe {
             foreach(var d in windows)if(d.Parent==IntPtr.Zero&&d.Visible&&d.ClassName=="#32770"&&d.Owner==editor.Handle)throw new Exception("dialog while closing script editor: "+d.Text+": "+DialogTexts(d));}
         throw new Exception("script editor did not close");}
     static string JoinJ(List<string> items){var b=new StringBuilder();for(int i=0;i<items.Count;i++){if(i>0)b.Append(',');b.Append(J(items[i]));}return b.ToString();}
-    static string ScriptEditorInspect(){return "{\"editor\":"+(ScriptEditor()==null?"null":WindowJson(ScriptEditor()))+",\"top\":"+TopWithChildren()+"}";}
+    static string ScriptEditorInspect(){if(ScriptEditor()==null)GuardDialogs();return "{\"editor\":"+(ScriptEditor()==null?"null":WindowJson(ScriptEditor()))+",\"top\":"+TopWithChildren()+"}";}
     static void ButtonCommand(WindowInfo dialog,int id,string label) {var button=DialogControl(dialog,"Button",id);if(button.Text!=label||!button.Enabled)throw new Exception("button label/state mismatch: "+label);PostCommand(dialog.Handle,(uint)id,button.Handle);}
     static string ObjectSetModel(string editorId,string modelPath,out string before) {
         GuardPlugin();before=null;
@@ -372,6 +437,13 @@ class Probe {
     static string HashFile(string path) {using(var input=System.IO.File.OpenRead(path))using(var hash=System.Security.Cryptography.SHA256.Create()){return BitConverter.ToString(hash.ComputeHash(input)).Replace("-","").ToLowerInvariant();}}
     static string FileState(string path) {var info=new System.IO.FileInfo(path);return "{\"path\":"+J(path)+",\"size\":"+info.Length+",\"modifiedUtc\":"+J(info.LastWriteTimeUtc.ToString("o"))+",\"sha256\":"+J(HashFile(path))+"}";}
     static string PluginInspect() {return "{\"file\":"+FileState(PluginPath())+",\"editorTitle\":"+J(MainWindow().Text)+",\"unsavedChanges\":"+MainWindow().Text.EndsWith("*").ToString().ToLower()+"}";}
+    static string EditorClose(out string before) {
+        GuardPlugin();GuardDialogs();var main=MainWindow();before=WindowJson(main);
+        if(main.Text.Contains("*")||ScriptEditor()!=null)throw new Exception("dirty work or script editor present; normal close requires review");
+        if(!PostMessage(main.Handle,0x0010,IntPtr.Zero,IntPtr.Zero))throw new Exception("normal close dispatch failed");
+        var wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<5000){System.Threading.Thread.Sleep(100);if(!IsWindow(main.Handle)){bool exited;try{exited=Process.GetProcessById((int)target).HasExited;}catch(ArgumentException){exited=true;}if(exited)return "{\"closed\":true,\"processExited\":true,\"forced\":false}";continue;}Discover();GuardDialogs();}
+        throw new Exception("normal close pending; inspect without force-kill");
+    }
     static string PluginSave(string expectedHash,out string before) {
         GuardPlugin();GuardDialogs();string path=PluginPath();before="{\"file\":"+FileState(path)+",\"windows\":"+TopWindows()+"}";
         if(!MainWindow().Text.EndsWith("*"))throw new Exception("plugin has no indicated unsaved changes; no save dispatched");
@@ -533,7 +605,7 @@ class Probe {
         System.Threading.Thread.Sleep(200);Discover();render=RenderWindowFor(cell);RECT wr;GetWindowRect(render.Handle,out wr);GetClientRect(render.Handle,out cr);
         return "{\"title\":"+J(render.Text)+",\"client\":["+(cr.Right-cr.Left)+","+(cr.Bottom-cr.Top)+"],\"windowRect\":["+wr.Left+","+wr.Top+","+wr.Right+","+wr.Bottom+"],\"steps\":["+String.Join(",",done.ToArray())+"],\"shiftDown\":"+((GetAsyncKeyState(0x10)&0x8000)!=0).ToString().ToLower()+",\"visualVerified\":false}";
     }
-    static string MainRaise() {GuardPlugin();GuardDialogs();var main=MainWindow();if(!SetForegroundWindow(main.Handle))throw new Exception("GECK main window could not be raised");return "{\"raised\":true,\"window\":"+WindowJson(main)+"}";}
+    static string MainRaise() {GuardPlugin();string before;WindowsShow(out before);Discover();var main=MainWindow();if(!IsWindowVisible(main.Handle)||IsIconic(main.Handle))throw new Exception("main root restore not verified");bool foreground=SetForegroundWindow(main.Handle);return "{\"raised\":"+foreground.ToString().ToLower()+",\"restored\":true,\"window\":"+WindowJson(main)+"}";}
     static string PlacementLayout() {
         GuardPlugin();GuardDialogs();var objectWindow=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="FaceClass"&&w.Text=="Object Window");var render=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="MonitorClass"&&w.Text=="Render Window");var cell=windows.FindAll(w=>w.Parent==IntPtr.Zero&&w.Visible&&w.ClassName=="ViewerClass"&&w.Text=="Cell View");
         if(objectWindow.Count!=1||render.Count!=1||cell.Count!=1)throw new Exception("placement window selectors were not unique");uint flags=0x0014;
@@ -671,7 +743,7 @@ class Probe {
         var dialog=DataDialog();ButtonCommand(dialog,2,"Cancel");WaitClosed(dialog);
         return "{\"cancelled\":true}";
     }
-    static string Execute(string[] args,Dictionary<string,string> env,out int code) { requestEnv=env;code=2;targetMode="none";discoveryMode="none";targetMs=0;discoverMs=0;phase=null; var watch=Stopwatch.StartNew(); string operation=args.Length==0?"status":args[0],before=null; try { var allowed=new List<string>{"status","inspect","menus.inspect","menus.resources","filter.set","category.select","objects.find","object.select","object.open","object.cancel","preview.open","preview.close","object.read","object.setModel","object.place","model.inspect","model.browse.inspect","plugin.inspect","plugin.save","world.cells.inspect","world.cells.new.inspect","cell.dialog.cancel","cell.find","cell.show","cell.refs","cell.select","cell.load","cell.context.inspect","cell.new.inspect","window.main.raise","window.layout.place","data.open.inspect","data.load","data.state","data.configure","data.cancel","script.editor.open","script.editor.command","script.editor.inspect","script.compile","script.editor.close","render.steps","windows.show"};if(!allowed.Contains(operation))throw new Exception("unknown operation");int limit=100;if(operation=="inspect"&&args.Length>1&&(!Int32.TryParse(args[1],out limit)||limit<1||limit>500))throw new Exception("inspect limit must be 1..500");if(operation!="status"&&operation!="inspect"&&operation!="menus.inspect"&&operation!="menus.resources"&&operation!="plugin.inspect"&&operation!="plugin.save"&&operation!="world.cells.inspect"&&operation!="world.cells.new.inspect"&&operation!="cell.dialog.cancel"&&operation!="cell.context.inspect"&&operation!="cell.new.inspect"&&operation!="window.main.raise"&&operation!="window.layout.place"&&operation!="data.open.inspect"&&operation!="data.state"&&operation!="data.cancel"&&operation!="script.editor.open"&&operation!="script.editor.inspect"&&operation!="script.editor.close"&&operation!="windows.show"&&args.Length!=((operation=="object.setModel"||operation=="cell.show"||operation=="render.steps")?3:2))throw new Exception(operation+" requires one argument");phase=Stopwatch.StartNew();targetMode=AcquireTarget()?"cached":"full";targetMs=phase.ElapsedMilliseconds;GuardSession();if(IntPtr.Size!=4)throw new Exception("helper must run as 32-bit");phase=Stopwatch.StartNew();discoveryMode=PrepareWindows(operation);discoverMs=phase.ElapsedMilliseconds;phase=Stopwatch.StartNew();string after;if(Config("MCP","")=="1"&&(operation=="object.place"||operation=="cell.load"||operation=="window.layout.place"))throw new Exception("experimental operation disabled in MCP helper");if(operation=="status")after=Status();else if(operation=="windows.show")after=WindowsShow(out before);else if(operation=="script.editor.open")after=ScriptEditorOpen(out before);else if(operation=="script.editor.command")after=ScriptEditorCommand(args[1],out before);else if(operation=="script.editor.inspect")after=ScriptEditorInspect();else if(operation=="script.compile")after=ScriptCompile(args[1],out before);else if(operation=="script.editor.close")after=ScriptEditorClose(out before);else if(operation=="inspect")after=Inspect(limit);else if(operation=="menus.inspect")after=Menus();else if(operation=="menus.resources")after=ResourceMenus();else if(operation=="world.cells.inspect")after=WorldCellsInspect(out before);else if(operation=="world.cells.new.inspect")after=WorldCellsNewInspect(out before);else if(operation=="cell.dialog.cancel")after=CellDialogCancel(out before);else if(operation=="cell.show")after=CellShow(args[1],args[2],out before);else if(operation=="render.steps")after=RenderSteps(args[1],args[2],out before);else if(operation=="cell.refs")after=CellRefs(args[1],out before);else if(operation=="cell.find")after=CellFind(args[1]);else if(operation=="cell.select")after=CellSelect(args[1],out before);else if(operation=="cell.load")after=CellLoad(args[1],out before);else if(operation=="object.place")after=ObjectPlace(args[1],out before);else if(operation=="cell.context.inspect")after=CellContextInspect(out before);else if(operation=="cell.new.inspect")after=CellNewInspect(out before);else if(operation=="window.main.raise")after=MainRaise();else if(operation=="window.layout.place")after=PlacementLayout();else if(operation=="data.open.inspect")after=DataOpenInspect(out before);else if(operation=="data.configure")after=DataConfigure(args[1],out before);else if(operation=="data.cancel")after=DataCancel();else if(operation=="data.state")after=DataState();else if(operation=="data.load")after=DataLoad(args[1],out before);else if(operation=="filter.set")after=FilterSet(args[1],out before);else if(operation=="category.select")after=CategorySelect(args[1],out before);else if(operation=="objects.find")after=ObjectsFind(args[1]);else if(operation=="plugin.inspect")after=PluginInspect();else if(operation=="plugin.save")after=PluginSave(args.Length==2?args[1]:"",out before);else if(operation=="model.browse.inspect")after=ModelBrowse(args[1],out before);else if(operation=="model.inspect")after=ModelInspect(args[1],out before);else if(operation=="object.read")after=ObjectRead(args[1],out before);else if(operation=="object.setModel")after=ObjectSetModel(args[1],args[2],out before);else if(operation=="preview.close")after=PreviewClose(args[1],out before);else if(operation=="object.cancel")after=ObjectCancel(args[1],out before);else if(operation=="preview.open")after=PreviewOpen(args[1],out before);else if(operation=="object.open")after=ObjectOpen(args[1],out before);else after=ObjectSelect(args[1],out before);code=0;FinishWindows(operation,true);return Result(true,operation,before,after,watch.ElapsedMilliseconds,null)+"";}catch(Exception ex){code=2;FinishWindows(operation,false);string windowsJson;try{windowsJson=TopWindows();}catch{windowsJson="[]";}return Result(false,operation,before,"{\"windows\":"+windowsJson+"}",watch.ElapsedMilliseconds,ex.Message);}
+    static string Execute(string[] args,Dictionary<string,string> env,out int code) { requestEnv=env;code=2;targetMode="none";discoveryMode="none";targetMs=0;discoverMs=0;phase=null; var watch=Stopwatch.StartNew(); string operation=args.Length==0?"status":args[0],before=null; try { var allowed=new List<string>{"status","inspect","menus.inspect","menus.resources","filter.set","category.select","objects.find","object.select","object.open","object.cancel","preview.open","preview.close","object.read","object.setModel","object.place","model.inspect","model.browse.inspect","plugin.inspect","plugin.save","world.cells.inspect","world.cells.new.inspect","cell.dialog.cancel","cell.find","cell.show","cell.refs","cell.select","cell.load","cell.context.inspect","cell.new.inspect","window.main.raise","window.layout.place","data.open.inspect","data.load","data.state","data.configure","data.cancel","script.editor.open","script.editor.command","script.editor.inspect","editor.close","script.compile","script.prepare","script.source","script.save","script.resolveSave","script.editor.close","render.steps","windows.show"};if(!allowed.Contains(operation))throw new Exception("unknown operation");int limit=100;if(operation=="inspect"&&args.Length>1&&(!Int32.TryParse(args[1],out limit)||limit<1||limit>500))throw new Exception("inspect limit must be 1..500");if(operation!="status"&&operation!="inspect"&&operation!="menus.inspect"&&operation!="menus.resources"&&operation!="plugin.inspect"&&operation!="plugin.save"&&operation!="world.cells.inspect"&&operation!="world.cells.new.inspect"&&operation!="cell.dialog.cancel"&&operation!="cell.context.inspect"&&operation!="cell.new.inspect"&&operation!="window.main.raise"&&operation!="window.layout.place"&&operation!="data.open.inspect"&&operation!="data.state"&&operation!="data.cancel"&&operation!="editor.close"&&operation!="script.editor.open"&&operation!="script.editor.inspect"&&operation!="script.editor.close"&&operation!="windows.show"&&args.Length!=((operation=="object.setModel"||operation=="cell.show"||operation=="render.steps"||operation=="script.save"||operation=="script.resolveSave")?3:2))throw new Exception(operation+" requires one argument");phase=Stopwatch.StartNew();targetMode=AcquireTarget()?"cached":"full";targetMs=phase.ElapsedMilliseconds;GuardSession();if(IntPtr.Size!=4)throw new Exception("helper must run as 32-bit");phase=Stopwatch.StartNew();discoveryMode=PrepareWindows(operation);discoverMs=phase.ElapsedMilliseconds;phase=Stopwatch.StartNew();string after;if(Config("MCP","")=="1"&&(operation=="object.place"||operation=="cell.load"||operation=="window.layout.place"))throw new Exception("experimental operation disabled in MCP helper");if(operation=="script.editor.close"&&args.Length!=1&&args.Length!=3)throw new Exception("checkpoint close requires EDID and source hash together");if(operation=="status")after=Status();else if(operation=="windows.show")after=WindowsShow(out before);else if(operation=="script.editor.open")after=ScriptEditorOpen(out before);else if(operation=="script.editor.command")after=ScriptEditorCommand(args[1],out before);else if(operation=="script.editor.inspect")after=ScriptEditorInspect();else if(operation=="editor.close")after=EditorClose(out before);else if(operation=="script.prepare")after=ScriptPrepare(args[1],out before);else if(operation=="script.source")after=ScriptSource(args[1]);else if(operation=="script.resolveSave")after=ScriptResolveSave(args[1],args[2],out before);else if(operation=="script.save")after=ScriptSave(args[1],args[2],out before);else if(operation=="script.compile")after=ScriptCompile(args[1],out before);else if(operation=="script.editor.close")after=ScriptEditorClose(args.Length==3?args[1]:null,args.Length==3?args[2]:null,out before);else if(operation=="inspect")after=Inspect(limit);else if(operation=="menus.inspect")after=Menus();else if(operation=="menus.resources")after=ResourceMenus();else if(operation=="world.cells.inspect")after=WorldCellsInspect(out before);else if(operation=="world.cells.new.inspect")after=WorldCellsNewInspect(out before);else if(operation=="cell.dialog.cancel")after=CellDialogCancel(out before);else if(operation=="cell.show")after=CellShow(args[1],args[2],out before);else if(operation=="render.steps")after=RenderSteps(args[1],args[2],out before);else if(operation=="cell.refs")after=CellRefs(args[1],out before);else if(operation=="cell.find")after=CellFind(args[1]);else if(operation=="cell.select")after=CellSelect(args[1],out before);else if(operation=="cell.load")after=CellLoad(args[1],out before);else if(operation=="object.place")after=ObjectPlace(args[1],out before);else if(operation=="cell.context.inspect")after=CellContextInspect(out before);else if(operation=="cell.new.inspect")after=CellNewInspect(out before);else if(operation=="window.main.raise")after=MainRaise();else if(operation=="window.layout.place")after=PlacementLayout();else if(operation=="data.open.inspect")after=DataOpenInspect(out before);else if(operation=="data.configure")after=DataConfigure(args[1],out before);else if(operation=="data.cancel")after=DataCancel();else if(operation=="data.state")after=DataState();else if(operation=="data.load")after=DataLoad(args[1],out before);else if(operation=="filter.set")after=FilterSet(args[1],out before);else if(operation=="category.select")after=CategorySelect(args[1],out before);else if(operation=="objects.find")after=ObjectsFind(args[1]);else if(operation=="plugin.inspect")after=PluginInspect();else if(operation=="plugin.save")after=PluginSave(args.Length==2?args[1]:"",out before);else if(operation=="model.browse.inspect")after=ModelBrowse(args[1],out before);else if(operation=="model.inspect")after=ModelInspect(args[1],out before);else if(operation=="object.read")after=ObjectRead(args[1],out before);else if(operation=="object.setModel")after=ObjectSetModel(args[1],args[2],out before);else if(operation=="preview.close")after=PreviewClose(args[1],out before);else if(operation=="object.cancel")after=ObjectCancel(args[1],out before);else if(operation=="preview.open")after=PreviewOpen(args[1],out before);else if(operation=="object.open")after=ObjectOpen(args[1],out before);else after=ObjectSelect(args[1],out before);code=0;FinishWindows(operation,true);return Result(true,operation,before,after,watch.ElapsedMilliseconds,null)+"";}catch(Exception ex){code=2;FinishWindows(operation,false);string windowsJson;try{windowsJson=TopWindows();}catch{windowsJson="[]";}return Result(false,operation,before,"{\"windows\":"+windowsJson+"}",watch.ElapsedMilliseconds,ex.Message);}
         finally{requestEnv=null;} }
 
     // ---- Persistent worker (M1) -------------------------------------------------
@@ -797,7 +869,7 @@ class Probe {
         for(int k=1;k+1<args.Length;k+=2){if(args[k]=="--input")inPath=args[k+1];else if(args[k]=="--output")outPath=args[k+1];else throw new Exception("unknown serve option: "+args[k]);}
         System.IO.TextReader input=String.IsNullOrEmpty(inPath)?Console.In:new System.IO.StreamReader(inPath);
         System.IO.TextWriter output=String.IsNullOrEmpty(outPath)?Console.Out:new System.IO.StreamWriter(outPath,false,new UTF8Encoding(false));
-        output.WriteLine("{\"id\":null,\"ok\":true,\"operation\":\"hello\",\"target\":\"worker\",\"before\":null,\"after\":{\"protocol\":1,\"workerPid\":"+Process.GetCurrentProcess().Id+",\"pointerBytes\":"+IntPtr.Size+"},\"elapsedMs\":0,\"error\":null}");output.Flush();
+        output.WriteLine("{\"id\":null,\"ok\":true,\"operation\":\"hello\",\"target\":\"worker\",\"before\":null,\"after\":{\"protocol\":1,\"workerPid\":"+Process.GetCurrentProcess().Id+",\"binaryPath\":"+J(Process.GetCurrentProcess().MainModule.FileName)+",\"binarySha256\":"+J(HashFile(Process.GetCurrentProcess().MainModule.FileName))+",\"pointerBytes\":"+IntPtr.Size+"},\"elapsedMs\":0,\"error\":null}");output.Flush();
         string line;
         while((line=input.ReadLine())!=null) {
             line=line.Trim();if(line.Length==0)continue;bool stop;

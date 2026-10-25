@@ -16,6 +16,106 @@ from .transport import BridgeError
 
 NATIVE=Path(__file__).resolve().parents[1]/'native/runtime'
 
+ADAPTERS = {
+    'vanilla': {'probeKinds': ['disabled', 'dead', 'item_count', 'quest_variable'], 'automatic': False,
+                'constraints': ['User executes prepared console batch and attests runtime mapping']},
+    'xnvse': {'probeKinds': ['quest_variable'], 'automatic': True,
+              'constraints': ['Native Windows', 'One quest per profile', 'Unique variables',
+                              'Fresh process/build-bound companion sample']},
+}
+
+
+def adapter_support(profile, adapter):
+    profile = Profile.model_validate(profile)
+    if adapter not in ADAPTERS:
+        raise ValueError('Unknown runtime adapter')
+    unsupported = [{'key': p.key, 'kind': p.kind} for p in profile.probes
+                   if p.kind not in ADAPTERS[adapter]['probeKinds']]
+    constraints = []
+    if adapter == 'xnvse' and not unsupported:
+        try:
+            canonical(profile)
+        except ValueError as error:
+            constraints.append(str(error))
+    return {'adapter': adapter, **ADAPTERS[adapter], 'supported': not unsupported and not constraints,
+            'unsupportedProbes': unsupported, 'constraintErrors': constraints,
+            'manualRoute': 'geck_runtime_prepare / runtime_diagnostics.py prepare; user executes batch',
+            'consoleExecution': 'unsupported by this read-only adapter; separate opt-in geck_console_execute uses a console companion'}
+
+
+def readiness(project, profile, expected_plugin_hash, adapter='xnvse'):
+    """Probe actual availability; installed bytes never establish live readiness."""
+    support = adapter_support(profile, adapter)
+    result = {**support, 'configured': project.launcher == 'native' if adapter == 'xnvse' else True,
+              'installed': False, 'live': False, 'fresh': False, 'correctProcessBuild': False,
+              'mapping': {'confidence': 'unverified', 'runtimePrefix': None}, 'ready': False}
+    if adapter == 'vanilla':
+        result.update(ready=support['supported'], reason='Manual route available; live mapping must be user-verified')
+        return result
+    _, module, _, receipt = paths(project)
+    result['installed'] = module.exists() and receipt.exists()
+    if not support['supported']:
+        result['reason'] = 'Unsupported probes/constraints; use the manual route or a single-quest variable profile'
+        return result
+    try:
+        current = snapshot(project, profile, expected_plugin_hash)
+        result.update(ready=True, live=True, fresh=True, correctProcessBuild=True,
+                      mapping={'confidence': 'verified_loaded_companion',
+                               'runtimePrefix': '%02X' % current['runtime_prefix'],
+                               'evidence': {k: current[k] for k in ('pid', 'started', 'epoch', 'sequence', 'tick_ms',
+                                                                  'plugin_sha256', 'companion_sha256')}})
+    except BridgeError as error:
+        result.update(reason=str(error), code=error.code,
+                      next='Run runtime_companion.py preflight, then explicit build/install with FNV closed; '
+                           'restart through xNVSE and verify a fresh snapshot. Manual diagnostics remain available.')
+    return result
+
+
+def preflight(project, profile, zig=None):
+    """Read-only exact-file/setup preview. Never downloads, builds or installs."""
+    token, module, telemetry, receipt_path = paths(project)
+    previous = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
+    owned = bool(previous and previous.get('project_id') == project.project_id
+                 and previous.get('game_root') == str(project.game_root.resolve())
+                 and previous.get('target') == str(module) and module.exists()
+                 and previous.get('sha256') == file_digest(module))
+    compiler_version = None
+    if zig and Path(zig).is_file():
+        compiler_version = subprocess.run([str(zig), 'version'], capture_output=True, text=True,
+                                          check=True, timeout=10).stdout.strip()
+    prerequisites = {name: (project.game_root / name).is_file()
+                     for name in ('FalloutNV.exe', 'nvse_loader.exe', 'nvse_1_4.dll')}
+    return {'support': adapter_support(profile, 'xnvse'), 'nativeWindows': os.name == 'nt' and project.launcher == 'native',
+            'compiler': {'configured': str(zig) if zig else None, 'available': bool(zig and Path(zig).is_file()),
+                         'version': compiler_version, 'validatedVersion': compiler_version == '0.14.1',
+                         'required': 'User-provided Zig 0.14.1; no automatic download'},
+            'prerequisiteFiles': prerequisites,
+            'extenderVersion': 'Requires xNVSE 6.4.9+ 6.x; installed files are not a verified runtime version',
+            'files': {'dll': str(module), 'telemetry': str(telemetry), 'receipt': str(receipt_path),
+                      'buildDirectory': str(project.state_dir / 'companion/builds'),
+                      'backupDll': str(project.state_dir / 'companion/backups' / (previous['sha256'] + '.dll')) if owned else None},
+            'existing': {'installed': module.exists(), 'ownedReceipt': owned,
+                         'dllSha256': file_digest(module) if module.exists() else None,
+                         'pluginSha256': file_digest(project.plugin_path) if project.plugin_path.exists() else None,
+                         'nativeSourceSha256': file_digest(NATIVE / 'companion.c')},
+            'loadOrderImpact': 'None; DLL only, no ESP/ESM added', 'restartRequired': True,
+            'steps': ['Quit FNV normally.', 'Explicitly build with --profile and --zig; inspect build.json.',
+                      'Explicitly install with --build-receipt and --expected-plugin-hash; owned backups retained.',
+                      'Start FNV through xNVSE, load disposable save, advance frames.',
+                      'Run readiness/snapshot and require fresh verified telemetry/mapping.'],
+            'saveDetectionLimit': 'Companion observes load/new-game epoch. Explicit context changes invalidate baseline; '
+                                  'unobserved save changes cannot be inferred from files.'}
+
+
+def set_save_context(project, label):
+    if not isinstance(label, str) or not 1 <= len(label) <= 100:
+        raise ValueError('save context label must contain 1..100 characters')
+    context = {'id': uuid.uuid4().hex, 'label': label, 'tick_ms': ticks(), 'time': time.time()}
+    write_json(project.state_dir / 'companion/save-context.json', context)
+    from .console import invalidate_context
+    invalidate_context(project, context['id'])
+    return {**context, 'next': 'Advance frames, take a new snapshot/baseline; previous context mappings are invalid.'}
+
 
 def canonical(profile):
     profile=Profile.model_validate(profile)
@@ -179,7 +279,7 @@ def validate(document,profile,profile_hash,*,pid,started,tick):
 
 
 def compare(baseline,current):
-    fields=('pid','started','epoch','plugin_sha256','companion_sha256','profile_sha256')
+    fields=('pid','started','epoch','plugin_sha256','companion_sha256','profile_sha256','save_context')
     if any(baseline.get(k)!=current.get(k) for k in fields):
         raise ValueError('Game/load/build/profile changed; new baseline required')
     if (type(baseline.get('sequence'))!=int or baseline['sequence']<1 or
@@ -192,6 +292,9 @@ def compare(baseline,current):
 
 
 def snapshot(project,profile,expected_plugin_hash,baseline=None):
+    support = adapter_support(profile, 'xnvse')
+    if not support['supported']:
+        raise BridgeError('RUNTIME_ADAPTER_UNSUPPORTED', 'Automatic adapter cannot collect this profile', support)
     try:
         profile,profile_hash=canonical(profile)
         if project.launcher!='native' or profile.plugin!=project.plugin:
@@ -214,6 +317,12 @@ def snapshot(project,profile,expected_plugin_hash,baseline=None):
         current={**document,'values':{p.key:document['values'][p.variable] for p in profile.probes},
                  'plugin_sha256':expected_plugin_hash,'companion_sha256':receipt['sha256'],
                  'identity':'verified_loaded_companion'}
+        context_path = project.state_dir / 'companion/save-context.json'
+        if context_path.exists():
+            context = json.loads(context_path.read_text())
+            if document['tick_ms'] <= context['tick_ms']:
+                raise ValueError('Sample predates explicit save-context change; advance frames and take a new baseline')
+            current['save_context'] = context['id']
         checkpoint={'capture':'complete','values':{k:{'value':v} for k,v in current['values'].items()}}
         # evaluate() requires user-attested for the vanilla path; here OS/companion
         # identity replaces the manual observation gate, without claiming atomic frames.

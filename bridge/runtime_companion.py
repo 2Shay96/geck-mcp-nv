@@ -11,6 +11,15 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project',required=True)
     sub=parser.add_subparsers(dest='mode',required=True)
+    preflight=sub.add_parser('preflight')
+    preflight.add_argument('--profile',required=True,type=Path)
+    preflight.add_argument('--zig',type=Path)
+    ready=sub.add_parser('readiness')
+    ready.add_argument('--profile',required=True,type=Path)
+    ready.add_argument('--expected-plugin-hash',required=True)
+    ready.add_argument('--adapter',choices=['vanilla','xnvse'],default='xnvse')
+    context=sub.add_parser('save-context')
+    context.add_argument('--label',required=True)
     build=sub.add_parser('build')
     build.add_argument('--profile',required=True,type=Path)
     build.add_argument('--zig',required=True,type=Path)
@@ -23,7 +32,15 @@ def main():
     snapshot.add_argument('--baseline',type=Path)
     args=parser.parse_args()
     project=Project.load(args.project)
-    if args.mode=='build':
+    if args.mode=='preflight':
+        result=core.preflight(project,json.loads(args.profile.read_text()),args.zig)
+    elif args.mode=='readiness':
+        result=core.readiness(project,json.loads(args.profile.read_text()),args.expected_plugin_hash,args.adapter)
+    elif args.mode=='save-context':
+        service=Service(project)
+        try:result=service.runtime_save_context(args.label)
+        finally:service.close()
+    elif args.mode=='build':
         result=core.build(project,json.loads(args.profile.read_text()),args.zig)
     elif args.mode=='install':
         result=core.install(project,json.loads(args.build_receipt.read_text()),args.expected_plugin_hash)

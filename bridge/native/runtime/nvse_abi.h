@@ -24,6 +24,15 @@ typedef struct {
     bool (*RegisterListener)(uint32_t, const char *, void (*)(Message *));
     bool (*Dispatch)(uint32_t, uint32_t, void *, uint32_t, const char *);
 } Messaging;
+
+/* Public Console interface: bool return requires version >=2 (xNVSE PluginAPI.h).
+ * Engine acceptance is not independent verification of a gameplay effect.
+ */
+typedef struct {
+    uint32_t version;
+    bool (*RunScriptLine)(const char *, void *);
+    bool (*RunScriptLine2)(const char *, void *, bool);
+} ConsoleAPI;
 /* Numeric Element is an eight-byte union, a one-byte type tag, and padding.
  * Only numeric results are accepted; strings/arrays/forms are never requested.
  */
@@ -43,3 +52,4 @@ _Static_assert(sizeof(void *) == 4, "FNV companion must be 32-bit");
 _Static_assert(offsetof(NVSEInterface, QueryInterface)==24, "NVSE ABI");
 _Static_assert(offsetof(ScriptAPI, CompileExpression)==24, "script ABI");
 _Static_assert(offsetof(Element, type)==8, "numeric Element ABI");
+_Static_assert(offsetof(ConsoleAPI, RunScriptLine)==4, "console ABI");

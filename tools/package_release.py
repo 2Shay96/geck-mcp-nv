@@ -26,7 +26,7 @@ def included(name):
     if not p.parts or p.parts[0] not in {'bridge', 'windows', 'docs', 'tools'}:
         return False
     if any(part in {'state', 'build', 'evidence', 'photos', 'fixtures', '.venv',
-                    '__pycache__', 'backups', 'screenshots'} for part in p.parts):
+                    '__pycache__', 'backups', 'screenshots', 'history'} for part in p.parts):
         return False
     if name in FIXTURE_TESTS:
         return False
@@ -39,7 +39,7 @@ def git(repo, *args):
     return subprocess.check_output(['git', '-C', str(repo), *args])
 
 
-def package(repo, revision, output):
+def package(repo, revision, output, working_tree=False):
     repo, output = Path(repo), Path(output)
     if output.suffix.lower() != '.zip':
         raise ValueError('output must be a .zip path')
@@ -58,12 +58,29 @@ def package(repo, revision, output):
         if (item.external_attr >> 16) & 0o170000 == 0o120000:
             raise ValueError('source symlinks are not supported')
         files[item.filename] = source.read(item)
+    if working_tree:
+        # Explicit local candidate mode: default publication packaging still uses committed source only.
+        files = {}
+        names = git(repo, 'ls-files', '-z', '--cached', '--others', '--exclude-standard').decode().split('\0')
+        for name in sorted(set(names) - {''}):
+            if not included(name):
+                continue
+            path = repo / name
+            if path.is_symlink():
+                raise ValueError('source symlinks are not supported')
+            if path.exists():
+                files[name] = path.read_bytes()
     version = tomllib.loads(files['bridge/pyproject.toml'].decode())['project']['version']
     module = ast.parse(files['bridge/geck_mcp/__init__.py'].decode())
     declared = [ast.literal_eval(n.value) for n in module.body if isinstance(n, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets)]
     if declared != [version] or f'(v{version})' not in files['README.md'].decode():
         raise ValueError('release version markers disagree')
+    snapshot_hashes = {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}
+    if working_tree:
+        files['CANDIDATE.json'] = (json.dumps({'candidateOnly': True, 'releaseReady': False,
+            'baseCommit': commit, 'source': 'uncommitted working tree', 'fileSha256': snapshot_hashes},
+            indent=2, sort_keys=True) + '\n').encode()
     with output.open('xb') as target, zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(files.items()):
             info = zipfile.ZipInfo(PREFIX + name, (1980, 1, 1, 0, 0, 0))
@@ -75,6 +92,8 @@ def package(repo, revision, output):
                 'sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
                 'size': output.stat().st_size, 'files': len(files),
                 'excluded': sorted(excluded), 'publication': 'local-only'}
+    if working_tree:
+        manifest.update(candidateOnly=True, releaseReady=False, fileSha256=snapshot_hashes)
     with manifest_path.open('x', encoding='utf-8') as target:
         json.dump(manifest, target, indent=2)
         target.write('\n')
@@ -86,5 +105,6 @@ if __name__ == '__main__':
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--revision', required=True, help='committed source revision')
     parser.add_argument('--output', type=Path, required=True, help='new .zip path; never overwritten')
+    parser.add_argument('--working-tree', action='store_true', help='local uncommitted candidate only; embeds releaseReady=false')
     args = parser.parse_args()
-    print(json.dumps(package(args.repo, args.revision, args.output), indent=2))
+    print(json.dumps(package(args.repo, args.revision, args.output, args.working_tree), indent=2))

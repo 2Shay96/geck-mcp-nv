@@ -23,7 +23,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             listing = await client.list_tools()
             tools = listing.tools if hasattr(listing, 'tools') else listing
             by_name = {tool.name: tool for tool in tools}
-            self.assertEqual(len(by_name), 31)
+            self.assertEqual(len(by_name), 44)
             self.assertIn('geck_show_windows', by_name)
             self.assertIn('geck_runtime_snapshot', by_name)
             self.assertIn('geck_runtime_compare', by_name)
@@ -80,6 +80,14 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             result = await client.call_tool('geck_capabilities', {})
             self.assertFalse(result.is_error)
             self.assertIn('STAT', str(result.structured_content))
+            listing = await client.list_tools()
+            tools = listing.tools if hasattr(listing, 'tools') else listing
+            self.assertEqual(len(tools), 44)
+            result = await client.call_tool('geck_console_readiness', {'expected_plugin_hash': '0'*64})
+            self.assertFalse(result.is_error, result)
+            self.assertFalse(result.structured_content['data']['ready'])
+            self.assertIn('not installed', result.structured_content['data']['reason'])
+
             result = await client.call_tool('geck_plugin_validate', {'expected_models':{'FixtureStatic':'fixture\\old.nif'}})
             self.assertFalse(result.is_error, result)
             self.assertTrue(result.structured_content['data']['persistenceVerified'])

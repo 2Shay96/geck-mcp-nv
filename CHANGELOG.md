@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.4.0 beta 1 - 25 October 2026
+
+25 October teleport feedback correction: coc now requires an originating CELL
+binding matching its EditorID on disk. Native destination proof compares the
+player's exact parent cell with a live-index BuildRef, avoiding bare runtime
+EditorID expression compilation. Receipts expose failed expressions/reasons;
+missing/wrong bindings fail before queue/context changes. Existing no-replay,
+loading and fresh-target gates remain. Real interior teleport passed with owner
+confirmation of usable landing/normal movement; exterior COC landing safety is
+not guaranteed. Larger GECK and controlled Shadow gates remain open.
+
+Console feedback upgrade, 24 October: wire-v2 decimal-string process identity;
+explicit named-plugin/local-form/hash binding resolved at dispatch; opt-in single
+coc with context rotation and later destination/loading proof; typed item count,
+equipped and condition queries; explicit MCP setup and readiness states. Tool
+count is 44. One companion upgrade/restart required, no per-target-plugin DLL.
+Existing no-replay/stale-target guards retained. Real v2 acceptance passed: separate
+plugin item count 0/1/0, equipped condition 66%, coc destination and fresh context.
+
+Owner scope addition, 23 October: separate opt-in xNVSE console actuator, four
+CLI/MCP readiness/execute/status/release tools (initially 42; now 44 with v2), process/build/
+context-bound requests, durable no-replay claims, typed GetModIndex readback and
+optional later quest effect verification. Telemetry stays read-only. Console load/
+quit/batch commands and arbitrary console-text capture remain unsupported;
+explicit coc is supported by the v2 workflow above;
+real FNV console smoke acceptance passed (lookup and later-loop quest start/stop).
+Broader GECK/Shadow gates remain pending. Earlier console-actuator exclusion is superseded.
+
+- Save reconciliation no longer waits for a script title asterisk to disappear.
+  Checkpoint close rechecks EDID/full-source hash and plugin mutation; hidden
+  retained editor HWNDs count as closed. Normal Exit preserves prompts and
+  saved source/bytecode proof remains mandatory. Offline verified; live retest pending.
+- Beta feedback: narrow PlayerRef validation, compression-aware semantic roundtrip,
+  exact canonical-field review that retains saved bytes, transient-safe resumable
+  load client, persistent cross-profile load ownership and bounded context checks.
+  NPC_ uses the existing generic template/field writer without a process-local adapter.
+  Status identifies startup Python source and actual helper binary independently.
+- Shared CLI/MCP compile start/status/resume, dispatch journal and per-editor
+  reservations across clients/profiles; UI progress never means compiled.
+- Full RichEdit source/hash checks, guarded recognized prompts and verified
+  close/save boundaries. Atomic cache updates require saved source, bytecode/header,
+  reference and semantic-variable proof/provenance. Legacy unverifiable caches recompile.
+- Loaded/installed/built identities, stale-save refusal and conservative final
+  record/override roundtrip checks. Unsupported override loss blocks installation.
+- Root/pane/modal restoration, normal clean-session close, native API/thread/window
+  evidence and bounded native list search.
+- Adapter readiness, unsupported-probe/manual routing, explicit setup preflight
+  and save-context baseline invalidation. No console actuator.
+- Explicit local working-tree candidate packaging embeds releaseReady=false.
+  Live gates remain required; this candidate is not a published release.
+
+
 ## 0.3.0: runtime diagnostics (2026-10-19)
 
 - Add optional read-only xNVSE companion with generated single-quest profiles,

@@ -45,7 +45,7 @@ from .records import SpecError, check_edid, record
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = ROOT / 'state' / 'templates'
-GENERIC_TYPES = {'CREA', 'WEAP', 'ACTI', 'SOUN', 'QUST', 'PACK', 'MESG', 'FLST', 'MISC', 'GLOB', 'ALCH',
+GENERIC_TYPES = {'NPC_', 'CREA', 'WEAP', 'ACTI', 'SOUN', 'QUST', 'PACK', 'MESG', 'FLST', 'MISC', 'GLOB', 'ALCH',
                  'FACT', 'CONT', 'SPEL', 'MGEF', 'ENCH', 'EXPL', 'PROJ', 'SCPT', 'VTYP'}
 SCRIPT_TYPES = {'object': 0, 'quest': 1, 'effect': 0x100}
 VALUE_KEYS = ('text', 'texts', 'form', 'forms', 'hex', 'u8', 'u16', 'u32', 's32', 'float', 'pack', 'empty')
@@ -216,6 +216,20 @@ def build_script(form_id, edid, spec, where=None, base_dir=None, cache=None):
     sha = source_sha(text, stype)
     entry = (cache or {}).get(edid)
     if entry and entry.get('sourceSha256') == sha and entry.get('formId') == '%08X' % form_id:
+        from .scripts import verify_script
+        try:
+            candidate = {'formId': entry['formId'], 'type': stype, 'text': text,
+                         'compiledSize': entry['compiledSize'], 'compiled': entry['compiled']}
+            # Validate the cached SCTX too; it cannot be silently replaced to launder stale bytecode.
+            candidate['text'] = next(bytes.fromhex(raw) for tag, raw in entry['compiled'] if tag == 'SCTX')
+            proof = verify_script(candidate, text, stype, '%08X' % form_id)
+            if not entry.get('provenance') or json.dumps(proof, sort_keys=True) != json.dumps(entry.get('verification'), sort_keys=True):
+                entry = None
+        except (ValueError, KeyError, StopIteration):
+            entry = None
+    else:
+        entry = None
+    if entry:
         subs = [Subrecord('EDID', zstring(edid))]
         for tag, hexdata in entry['compiled']:
             subs.append(Subrecord(tag, text if tag == 'SCTX' else bytes.fromhex(hexdata)))
@@ -239,6 +253,8 @@ def extract_compiled(plugin, cache_formids=None):
         if not schr or len(schr) < 20:
             continue
         compiled_size = struct.unpack_from('<I', schr, 8)[0]
+        if rec.editor_id in out:
+            raise ValueError('Duplicate script EditorID: ' + str(rec.editor_id))
         out[rec.editor_id] = {
             'formId': '%08X' % rec.form_id,
             'compiledSize': compiled_size,
