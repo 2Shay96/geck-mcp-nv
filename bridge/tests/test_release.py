@@ -71,6 +71,18 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             release.package(self.repo, 'HEAD', first)
 
+    def test_working_candidate_is_explicit_and_binds_uncommitted_source(self):
+        (self.repo / 'bridge/new_feature.py').write_bytes(b'synthetic = True\n')
+        output = self.root / 'candidate.zip'
+        manifest = release.package(self.repo, 'HEAD', output, working_tree=True)
+        self.assertTrue(manifest['candidateOnly'])
+        self.assertFalse(manifest['releaseReady'])
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.read(release.PREFIX + 'bridge/new_feature.py'), b'synthetic = True\n')
+            candidate = json.loads(archive.read(release.PREFIX + 'CANDIDATE.json'))
+            self.assertFalse(candidate['releaseReady'])
+            self.assertEqual(candidate['fileSha256'], manifest['fileSha256'])
+
     def test_mismatched_versions_refused_before_output(self):
         (self.repo / 'bridge/geck_mcp/__init__.py').write_text('__version__="9.9.9"\n')
         self.git('add', 'bridge/geck_mcp/__init__.py')

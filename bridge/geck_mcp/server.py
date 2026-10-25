@@ -7,7 +7,7 @@ from typing import Annotated, Literal, Any
 import anyio
 from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from . import __version__
 from .config import Project
@@ -33,6 +33,32 @@ EditorID = Annotated[str, Field(pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,127}$')]
 Models = Annotated[dict[EditorID, str], Field(min_length=1, max_length=100)]
 
 
+class ConsoleTarget(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    pid: int = Field(ge=1, lt=2**32)
+    started: str = Field(pattern=r'^[1-9][0-9]{0,19}$')
+    epoch: int = Field(ge=1)
+    build_id: Hash
+    context: str = Field(pattern=r'^[a-f0-9]{32}$')
+    runtime_prefix: int = Field(ge=0, lt=255)
+    plugin_sha256: Hash
+
+
+class ConsoleBinding(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    plugin: str = Field(pattern=r'^[A-Za-z0-9_. -]{1,60}\.[eE][sS][pPmM]$')
+    local_form: str = Field(default='000000', pattern=r'^[0-9A-Fa-f]{6}$')
+    sha256: Hash
+
+
+class ConsoleVerification(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['quest_running', 'quest_variable', 'item_count', 'equipped']
+    local_form: str = Field(pattern=r'^[0-9A-Fa-f]{6}$')
+    variable: str | None = Field(default=None, pattern=r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+    equals: float = Field(allow_inf_nan=False)
+
+
 class Envelope(BaseModel):
     ok: bool
     operationId: str
@@ -41,6 +67,7 @@ class Envelope(BaseModel):
     outcome: Literal['unchanged', 'committed_in_editor', 'saved_verified',
                      'failed_before_change', 'partial_change', 'outcome_unknown', 'loading', 'loaded_verified',
                      'loaded_unverified',
+                     'pending', 'blocked', 'failed', 'verified', 'acknowledged',
                      'built', 'installed', 'captured', 'runtime_prepared', 'runtime_collected', 'runtime_closed']
     data: Any
     error: dict | None
@@ -78,6 +105,92 @@ def make_server(project, service=None):
         """Read current editor/session identity, title, dirty marker, windows and filter. Does not open dialogs."""
         return await invoke(service.status)
 
+    @server.tool(annotations=edit)
+    async def geck_console_execute(command: Annotated[str, Field(min_length=1, max_length=512)],
+                                    intent: Annotated[str, Field(min_length=3, max_length=500)],
+                                    target: ConsoleTarget, expected_plugin_hash: Hash, request_key: Key,
+                                    verify: ConsoleVerification | None = None,
+                                    timeout_seconds: Annotated[int, Field(ge=1, le=30)] = 10,
+                                    binding: ConsoleBinding | None = None, authorize_teleport: bool = False) -> Result:
+        """Execute one explicitly intended in-game console line through an opt-in xNVSE command companion.
+        May change gameplay. Use fresh geck_console_readiness target; {prefix} resolves the current plugin index.
+        Returns pending, never an assumed effect. Retain this operationId and poll geck_console_status.
+        No replay after timeout. Optional quest effect proof is read on a later game loop.
+        Named binding resolves {form} in any loaded plugin. coc CellEditorID requires authorize_teleport=true
+        and a binding identifying the originating CELL with that exact EditorID;
+        invalidates runtime context and waits for destination/loading readback. Never replay an uncertain teleport.
+        Load/quit/batch commands, chained input and arbitrary console-text capture are unsupported."""
+        return await invoke(service.console_execute, command, intent, target.model_dump(), expected_plugin_hash,
+                            request_key, verify.model_dump(exclude_none=True) if verify else None, timeout_seconds,
+                            binding.model_dump() if binding else None, authorize_teleport)
+
+    @server.tool(annotations=edit)
+    async def geck_console_query(kind: Literal['plugin_index', 'item_count', 'equipped', 'weapon_health_percent', 'equipped_health'],
+                                 intent: str, target: ConsoleTarget, expected_plugin_hash: Hash, request_key: Key,
+                                 binding: ConsoleBinding | None = None,
+                                 slot: Annotated[int, Field(ge=0, le=19)] = 5) -> Result:
+        """Typed public-API player inventory/equipped/condition or named plugin-index readback.
+        Numeric result is independent of console acknowledgment. Item count does not prove item condition;
+        weapon_health_percent is equipped weapon percentage, equipped_health is absolute health by slot.
+        Uses the same durable claim, identity checks and status polling; does not issue console input."""
+        return await invoke(service.console_query, kind, intent, target.model_dump(), expected_plugin_hash,
+                            request_key, binding.model_dump() if binding else None, slot)
+
+    @server.tool(annotations=edit)
+    async def geck_console_setup(mode: Literal['preflight', 'build', 'install'], expected_plugin_hash: Hash,
+                                 request_key: Key, zig: str | None = None, build_receipt: str | None = None) -> Result:
+        """Supported explicit opt-in companion setup. Preflight previews paths/restrictions without install.
+        Build uses user-provided local Zig 0.14.1, no downloads. Install accepts only an owned build receipt,
+        requires FNV normally closed, preserves backups, refuses modified/foreign DLLs; restart required."""
+        return await invoke(service.console_setup, mode, expected_plugin_hash, request_key, zig, build_receipt)
+
+    @server.tool(annotations=observe)
+    async def geck_console_readiness(expected_plugin_hash: Hash) -> Result:
+        """Preview separate console-companion setup and probe fresh process/build/save-context/mapping readiness.
+        Does not install or execute commands. A telemetry-only companion cannot enable this actuator."""
+        return await invoke(service.console_readiness, expected_plugin_hash)
+
+    @server.tool(annotations=ui)
+    async def geck_console_status(operation_id: str) -> Result:
+        """Reconcile the ORIGINAL execute operationId, never resend a command. Sent, engine acknowledged and
+        later effectVerified are separate. Archives owned terminal receipts and releases the command reservation."""
+        return await invoke(service.console_status, operation_id)
+
+    @server.tool(annotations=ui)
+    async def geck_console_release(operation_id: str, review_note: Annotated[str, Field(min_length=12)]) -> Result:
+        """Release a reviewed uncertain command ONLY after FNV has exited normally. Preserve receipts;
+        historical outcome remains unknown and the same command/request key is never replayed."""
+        return await invoke(service.console_release, operation_id, review_note)
+
+    @server.tool(annotations=edit)
+    async def geck_editor_close(expected_title: str, expected_plugin_hash: Hash, request_key: Key,
+                                 editor_session: EditorSession = None) -> Result:
+        """Guarded normal close of the matching clean GECK session. Dirty/unknown work requires review.
+        Never force-kills. Restart GECK explicitly after close, then load the checked build."""
+        return await invoke(service.editor_close, editor_session, expected_title, expected_plugin_hash, request_key)
+
+    @server.tool(annotations=edit)
+    async def geck_compile_start(request_key: Key,
+                                 deadline_seconds: Annotated[int, Field(ge=30, le=7200)] = 1200) -> Result:
+        """Reserve this editor and start a durable compile of the current built/installed/bridge-loaded spec.
+        Returns pending; resume the operationId. Never equates UI progress with persisted bytecode."""
+        return await invoke(service.compile_start, request_key, deadline_seconds)
+
+    @server.tool(annotations=observe)
+    async def geck_compile_status(operation_id: str) -> Result:
+        """Read durable compile phase, per-script proofs and journal; does not interact with GECK."""
+        return await invoke(service.compile_status, operation_id)
+
+    @server.tool(annotations=edit)
+    async def geck_compile_resume(operation_id: str,
+                                  extend_seconds: Annotated[int, Field(ge=0, le=7200)] = 0,
+                                  reviewed_roundtrip: Hash | None = None, review_note: str | None = None) -> Result:
+        """Advance one bounded compile phase. Unknown prompts retain work. Uncertain Save is not replayed.
+        Cache/rebuild/install require saved-plugin proof. Pending retains the editor reservation across clients.
+        Optional reviewed_roundtrip token plus review_note explicitly retains canonical saved fields; no losing
+        rebuild is installed and no spec adoption is implied. Missing overrides cannot be waived."""
+        return await invoke(service.compile_resume, operation_id, extend_seconds, reviewed_roundtrip, review_note)
+
     @server.tool(annotations=ui)
     async def geck_runtime_prepare(profile: RuntimeProfile, save_label: str, runtime_mapping: RuntimeMapping,
                                    expected_plugin_hash: Hash, request_key: Key, preview: bool = False) -> Result:
@@ -88,6 +201,25 @@ def make_server(project, service=None):
                             dict(profile=profile.model_dump(), save_label=save_label,
                                  runtime_mapping=runtime_mapping.model_dump(), expected_plugin_hash=expected_plugin_hash,
                                  preview=preview), request_key)
+
+    @server.tool(annotations=observe)
+    async def geck_runtime_readiness(profile: RuntimeProfile, expected_plugin_hash: Hash,
+                                      adapter: Literal['vanilla', 'xnvse'] = 'xnvse') -> Result:
+        """Report adapter-specific probe support and configured/installed/live/fresh/mapping readiness.
+        No install, console execution or game input. Unavailable automatic probes include the manual route."""
+        return await invoke(service.runtime_readiness, profile.model_dump(), expected_plugin_hash, adapter)
+
+    @server.tool(annotations=observe)
+    async def geck_runtime_setup_preflight(profile: RuntimeProfile, zig_path: str | None = None) -> Result:
+        """Preview optional companion prerequisites, exact paths/backups and restart/verification steps.
+        Does not download compilers, build or install DLLs. Setup requires explicit CLI build/install."""
+        return await invoke(service.runtime_preflight, profile.model_dump(), zig_path)
+
+    @server.tool(annotations=ui)
+    async def geck_runtime_save_context(label: Annotated[str, Field(min_length=1, max_length=100)]) -> Result:
+        """Explicit save-context change: invalidate automatic baseline/mapping until a newer sample.
+        Never claims automatic detection of every save change. No gameplay input."""
+        return await invoke(service.runtime_save_context, label)
 
     @server.tool(annotations=observe)
     async def geck_runtime_snapshot(profile: RuntimeProfile, expected_plugin_hash: Hash) -> Result:
@@ -131,8 +263,8 @@ def make_server(project, service=None):
 
     @server.tool(annotations=ui)
     async def geck_show_windows(editor_session: EditorSession = None, session_id: LegacySession = None) -> Result:
-        """Show GECK's Object Window, Cell View and Render Window again when GECK left them hidden (seen after
-        loading a plugin on Windows). Uses ShowWindow without activating; no clicks. Allowed during recovery."""
+        """Restore and verify GECK root, Object/Cell/Render panes and owned modals.
+        Uses ShowWindow without clicks. Allowed during recovery; ordinary status never raises focus."""
         return await invoke(service.show_windows, session_arg(editor_session, session_id))
 
     @server.tool(annotations=observe)

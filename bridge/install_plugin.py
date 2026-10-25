@@ -18,18 +18,19 @@ from geck_mcp.authoring import Authoring, AuthoringError  # noqa: E402
 from geck_mcp.config import Project  # noqa: E402
 from geck_mcp.esp import build as builder  # noqa: E402
 from geck_mcp.service import Service  # noqa: E402
+from geck_mcp.transport import BridgeError  # noqa: E402
 
 
 def editor_title(project):
+    service = Service(project)
     try:
-        service = Service(project)
-        try:
-            result = service.status()
-        finally:
-            service.close()
-        return result['data']['editorTitle'] if result['ok'] else None
-    except Exception:
-        return None     # GECK not running: installing is safe
+        return service.transport.call('status')['editorTitle']
+    except BridgeError as error:
+        if 'expected exactly one GECK process; found 0' in str(error):
+            return None
+        raise AuthoringError('EDITOR_UNKNOWN', 'Cannot establish editor state; installation refused') from error
+    finally:
+        service.close()
 
 
 def main():
@@ -40,13 +41,22 @@ def main():
     args = parser.parse_args()
     spec = builder.load_spec(args.spec.read_text())
     project = Project.load(args.project_config or ROOT / 'projects' / (spec['project_id'] + '.json'))
+    service = Service(project)
+    def action():
+        try:
+            title = service.call('status')['editorTitle']
+        except BridgeError as error:
+            if 'expected exactly one GECK process; found 0' not in str(error):
+                raise
+            title = None  # positive helper process inventory, never inferred from a timeout
+        return Authoring(project, spec_path=args.spec).install(title, args.allow_replace_foreign)
     try:
-        entry = Authoring(project, spec_path=args.spec).install(editor_title(project), args.allow_replace_foreign)
-    except AuthoringError as error:
-        print(json.dumps({'ok': False, 'code': error.code, 'error': str(error)}))
-        return 2
-    print(json.dumps(dict(entry, ok=True)))
-    return 0
+        result = service.run('geck_plugin_install', {'spec': str(args.spec.resolve()), 'foreign': args.allow_replace_foreign},
+                             action, modifies=True)
+        print(json.dumps(result))
+        return 0 if result['ok'] else 2
+    finally:
+        service.close()
 
 
 if __name__ == '__main__':

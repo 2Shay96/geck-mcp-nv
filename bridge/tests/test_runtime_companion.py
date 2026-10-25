@@ -126,6 +126,53 @@ class CompanionTests(unittest.TestCase):
         self.assertFalse(failed['ok']);self.assertIsNone(failed['data'])
         self.assertEqual(failed['error']['code'],'RUNTIME_COMPANION_UNAVAILABLE')
 
+    def test_readiness_separates_installed_fresh_process_build_and_mapping(self):
+        result=c.readiness(self.p,self.profile,self.plugin_hash)
+        self.assertTrue(result['ready'],result)
+        self.assertEqual(result['mapping']['runtimePrefix'],'11')
+        for key,value in [('tick_ms',1),('started',457),('profile_sha256','wrong'),('status','plugin_unavailable')]:
+            with self.subTest(key=key):
+                c.write_json(self.telemetry,{**self.doc,key:value})
+                result=c.readiness(self.p,self.profile,self.plugin_hash)
+                self.assertTrue(result['installed'])
+                self.assertFalse(result['ready'])
+                self.assertEqual(result['mapping']['confidence'],'unverified')
+                self.assertIsNone(result['mapping']['runtimePrefix'])
+
+    def test_mixed_probe_profile_reports_unsupported_probes_and_manual_route(self):
+        mixed=copy.deepcopy(self.profile)
+        mixed['probes'].append({'key':'items','kind':'item_count','local_form':'000123'})
+        mixed['probes'].append({'key':'state','kind':'disabled','local_form':'000124'})
+        result=c.readiness(self.p,mixed,self.plugin_hash)
+        self.assertEqual(result['unsupportedProbes'],[{'key':'items','kind':'item_count'},{'key':'state','kind':'disabled'}])
+        self.assertFalse(result['ready'])
+        self.assertIn('manual',result['reason'])
+        self.assertTrue(c.readiness(self.p,mixed,self.plugin_hash,'vanilla')['ready'])
+        with self.assertRaises(BridgeError) as caught:c.snapshot(self.p,mixed,self.plugin_hash)
+        self.assertEqual(caught.exception.code,'RUNTIME_ADAPTER_UNSUPPORTED')
+        self.assertEqual(caught.exception.evidence['unsupportedProbes'],result['unsupportedProbes'])
+
+    def test_missing_companion_preflight_has_exact_paths_and_never_installs(self):
+        before={str(p):p.read_bytes() for p in self.p.game_root.rglob('*') if p.is_file()}
+        preview=c.preflight(self.p,self.profile)
+        self.assertEqual(preview['files']['dll'],str(self.module))
+        self.assertFalse(preview['compiler']['available'])
+        self.assertEqual(before,{str(p):p.read_bytes() for p in self.p.game_root.rglob('*') if p.is_file()})
+        with patch.object(c,'paths',return_value=('missing',self.module.with_name('missing.dll'),self.telemetry,self.receipt_path.with_name('missing.json'))):
+            missing=c.readiness(self.p,self.profile,self.plugin_hash)
+        self.assertFalse(missing['installed']);self.assertFalse(missing['ready'])
+        self.assertIn('unsupported by this read-only adapter',missing['consoleExecution'])
+
+    def test_explicit_save_context_invalidates_old_sample_and_baseline(self):
+        before=self.snapshot()
+        c.set_save_context(self.p,'new explicit save')
+        with self.assertRaisesRegex(BridgeError,'predates explicit'):self.snapshot()
+        self.doc['tick_ms']=10600;self.doc['sequence']+=1;c.write_json(self.telemetry,self.doc)
+        with patch.object(c,'ticks',return_value=10700):
+            after=self.snapshot()
+        with self.assertRaisesRegex(ValueError,'changed'):c.compare(before,after)
+        self.assertIn('save_context',after)
+
     @unittest.skipUnless(os.name=='nt' and os.environ.get('GECK_MCP_ZIG'),'requires Windows and GECK_MCP_ZIG compiler path')
     def test_native_generated_dll_six_failure_modes_and_load_lifecycle(self):
         receipt=c.build(self.p,self.profile,os.environ['GECK_MCP_ZIG'])

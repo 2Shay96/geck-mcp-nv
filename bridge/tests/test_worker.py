@@ -97,6 +97,16 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(t.call('status')['served'], 1)
         self.assertEqual(self.starts(), 2)
 
+    def test_pipe_failure_after_partial_delivery_is_never_replayed(self):
+        t = self.make()
+        t.call('status')
+        with patch.object(t, '_send', side_effect=BridgeError('OUTCOME_UNKNOWN', 'partial write', uncertain=True)) as send:
+            with self.assertRaises(BridgeError) as caught:
+                t.call('script.save', 'Fixture', 'a' * 64)
+        self.assertTrue(caught.exception.uncertain)
+        self.assertEqual(send.call_count, 1)
+        self.assertFalse(t.alive)
+
     def test_editor_errors_keep_worker_and_are_typed(self):
         t = self.make()
         with self.assertRaises(BridgeError) as caught:

@@ -55,6 +55,23 @@ def main():
         parser.error('give a spec file, or --project with a profile that has "spec"')
     args.state = args.state or (project.state_dir if project else ROOT / 'state')
     args.out = args.out or args.state.parent / 'build'
+    if project:
+        from geck_mcp.authoring import Authoring
+        from geck_mcp.service import Service
+        configured = project.model_copy(update={'state_dir': args.state})
+        service = Service(configured)
+        auth = Authoring(configured, spec_path=args.spec, build_dir=args.out)
+        def action():
+            receipt, _ = auth.build(write=not args.dry_run, adopt=args.adopt,
+                                    check_assets=not args.no_assets, compare=args.compare)
+            return {'_outcome': 'built' if receipt['written'] else 'unchanged', **receipt}
+        try:
+            result = service.run('geck_plugin_build', {'spec': str(args.spec.resolve()), 'dryRun': args.dry_run},
+                                 action, editor=not args.dry_run)
+            print(json.dumps(result))
+            return 0 if result['ok'] and result['data']['validation']['ok'] else 3
+        finally:
+            service.close()
     try:
         spec = builder.load_spec(args.spec.read_text())
         formids = FormIdMap(args.state / 'formids' / (spec['project_id'] + '.json'), spec['plugin'])
@@ -65,7 +82,7 @@ def main():
             print(json.dumps({'adopted': len(adopted)}))
         index = MasterIndex(index_files(args.state, spec['masters']))
         data, receipt = builder.build(spec, formids, index, base_dir=args.spec.resolve().parent,
-                                      script_cache=load_cache(args.state, spec['project_id']),
+                                      script_cache={},  # verified reuse requires --project compiler/dependency context
                                       templates=generic.template_dirs(args.state))
     except (SpecError, ValueError) as error:
         print(json.dumps({'ok': False, 'error': str(error)}))

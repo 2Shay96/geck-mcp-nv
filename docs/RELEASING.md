@@ -1,3 +1,41 @@
+# 0.4.0 beta 1 publication - 25 October 2026
+
+The owner authorized publishing the latest checked work on GitHub and Nexus as a
+source-only beta. No DLL/EXE belongs in release downloads; users build the helper
+and optional companions locally with [SOURCE-SETUP.md](SOURCE-SETUP.md).
+The stable-release live gates below remain open; beta publication does not mark
+them passed. Use tag v0.4.0-beta.1 (bridge protocol version remains 0.4.0), mark the
+GitHub release as a prerelease, and retain the previous stable Nexus file.
+The existing Nexus workflow only accepts stable releases, so use the logged-in
+Nexus file editor for this beta rather than changing or bypassing that workflow.
+
+# 0.4.0 candidate upgrade and release checks
+
+This development candidate is unpublished. Preserve project state/backups/specs
+and source, rebuild the source-only helper with build_helper.py using the existing
+helper replacement rules, then restart MCP clients. Expect version 0.4.0 and 44
+bridge tools. The parallel windows/ adapter keeps its independent package version.
+Legacy caches without provenance require recompilation. Inspect separate loaded,
+installed and built hashes before saving; reload after final install.
+
+The separate opt-in console actuator is included as source; existing telemetry
+installations do not gain command input until explicit setup. Follow
+[console setup and acceptance](../bridge/docs/CONSOLE-COMMANDS.md).
+
+Complete the live gates in TESTING.md before release approval. A local uncommitted
+review package can be prepared without a commit:
+
+```powershell
+py -3.12 tools/package_release.py --revision HEAD --working-tree --output ..\GECK-MCP-for-New-Vegas-0.4.0-candidate.zip
+```
+
+It embeds CANDIDATE.json with exact source hashes and releaseReady=false. After
+approved commits and passed acceptance, use ordinary committed-revision packaging
+for the publication archive and verify extracted source on Windows. Commit, push,
+merge, tag and publication each remain owner approvals.
+
+---
+
 # 0.3.0 upgrade and download checks
 
 0.3.0 brings vanilla batch diagnostics and optional automatic xNVSE quest

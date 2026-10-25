@@ -1,6 +1,8 @@
-# GECK MCP for New Vegas: WIP prototype (v0.3.0)
+# GECK MCP for New Vegas: WIP prototype (v0.4.0)
 
-Current release: **0.3.0** on [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files) and [GitHub Releases](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0). GitHub gets development updates first, so main may be newer than the Nexus download. See [upgrading and release checks](docs/RELEASING.md).
+**0.4.0 beta 1** adds resumable compilation and opt-in in-game console tools. Windows live console acceptance passed; larger GECK workloads and controlled Shadow-session gates remain open. This is a beta, not a stable-release claim.
+
+Previous stable prototype: **0.3.0** on [Nexus Mods](https://www.nexusmods.com/newvegas/mods/99851?tab=files) and [GitHub Releases](https://github.com/2Shay96/geck-mcp-nv/releases/tag/v0.3.0). GitHub gets development updates first, so main may be newer than the Nexus download. See [upgrading and release checks](docs/RELEASING.md).
 
 **Let an AI agent (Claude, Codex or any MCP client) build and edit Fallout: New Vegas plugins and drive the GECK.**
 
@@ -13,13 +15,13 @@ Current release: **0.3.0** on [Nexus Mods](https://www.nexusmods.com/newvegas/mo
 An optional read-only xNVSE companion adds automatic quest snapshots and comparisons
 without console typing or screen control. See [setup and validation limits](bridge/docs/AUTOMATIC-RUNTIME.md).
 
-The bridge now exposes **31 tools**, including four user-driven vanilla runtime
+The bridge now exposes **44 tools**, including four user-driven vanilla runtime
 diagnostics tools and a shared CLI. They prepare safe query batches, collect fresh
 checkpoint output, compare values and evaluate declarative assertions. Windows vanilla item-count/delta/error capture passed on 18 October; see [usage and limits](bridge/docs/MCP-QUICKSTART.md#runtime-diagnostics-29-bridge-tools).
 
 | Folder | MCP server | What it does | Tested |
 | --- | --- | --- | --- |
-| [`bridge/`](bridge/README.md) | `geck` (31 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
+| [`bridge/`](bridge/README.md) | `geck` (44 tools) | **Builds whole plugins from a JSON spec** (records, cells, placed objects, stable FormIDs) without GECK. **Compiles scripts with GECK's own compiler** and caches the bytecode. Loads plugins in GECK, checks cells against the build, sets models, saves with backups. Also actor photos and animated sprite billboards. | ✅ Windows 11 (vanilla GECK) · ❓ Linux/Proton · also tested on Mac via CrossOver |
 | [`windows/`](windows/README.md) | `geck_nv` (46 tools) | **FNV port of [GECK MCP for Fallout 3](https://github.com/maksimka2432fr23/codex-skill-mcp-fallout3)** by maksimka2432fr23. Windows UI automation: launch GECK through NVSE, navigate Cell View and the Object Window, drag objects into the Render Window, load order, transactions and rollback, placed-reference patches. | ❓ Windows (not yet run against the FNV GECK) |
 
 You can run either server on its own, or both at once (their tool names don't overlap).
@@ -39,7 +41,7 @@ fights the player in game.
 1. Read [`bridge/README.md`](bridge/README.md) (any OS), [`windows/README.md`](windows/README.md) (Windows), or both.
 2. Install Python 3.12+ and create a virtual environment in the folder you'll use.
 3. Nexus download: build the GECK helper once with `build_helper.py` (see [`bridge/README.md`](bridge/README.md), step 3).
-   The download contains source only, no `.exe`; GitHub has a prebuilt one.
+   Release downloads contain source only: **no DLL or EXE**. Build the helper locally; see [AI-assisted source setup](docs/SOURCE-SETUP.md). Optional console/telemetry DLLs are built locally for your project.
 4. Register the server in your MCP client (examples are in each README).
 5. First prompt: *"Run geck_status (or geck_doctor) and tell me what you see. Don't change anything."*
 
@@ -76,3 +78,26 @@ a GECK restart, and the Render Window can be captured on Windows. Next steps: a 
 - Made with AI coding agents (Anthropic Claude and OpenAI Codex), directed and tested by 2Shay.
 - Not affiliated with or endorsed by Bethesda Softworks, ZeniMax, Microsoft, Anthropic or OpenAI.
   Fallout and G.E.C.K. are trademarks of their owners.
+
+## Resumable compilation and readiness (0.4.0 candidate)
+
+Build/install/load through the bridge, then use `geck_compile_start`,
+`geck_compile_status` and `geck_compile_resume`. The shared CLI is
+`bridge/compile_scripts.py`. Pending/blocked retain work and the editor reservation;
+only verified means saved-script/cache/rebuild/install checks passed. Quiet UI
+polling or input dispatch is provisional. Unknown prompts require review.
+See [compile recovery](bridge/docs/MCP-QUICKSTART.md#resumable-compilation-040-candidate).
+
+`geck_runtime_readiness` separates per-adapter support and installed files from
+fresh process/build/mapping proof. Automatic sampling supports a single quest's
+variables; item counts and reference state use vanilla manual batches. Setup
+preflight previews exact files/backups and restart checks. No compiler download,
+DLL install or console command runs without an explicit request.
+
+## Owner-requested console execution (23 October)
+
+The v0.4.0 candidate now includes separate opt-in `geck_console_readiness`,
+`geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
+Read-only telemetry is unchanged. See [console setup, commands and outcome semantics](bridge/docs/CONSOLE-COMMANDS.md).
+Real FNV console smoke acceptance passed; broader GECK/Shadow gates remain
+pending, so this candidate is not release-ready.

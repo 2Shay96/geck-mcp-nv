@@ -36,6 +36,17 @@ def write_template(state, name='TestAidTemplate', **kw):
 
 
 class GenericTypes(unittest.TestCase):
+    def test_npc_explicit_fields_use_shared_generic_writer(self):
+        spec = {'schema':1,'project_id':'npc-fixture','plugin':'NpcFixture.esp','masters':['FalloutNV.esm'],
+                'records':{'TestActor':{'type':'NPC_','fields':[{'tag':'FULL','text':'Synthetic actor'},
+                                                             {'tag':'AIDT','hex':'00010203'}]}}}
+        builder.check_spec(spec)
+        with tempfile.TemporaryDirectory() as tmp:
+            data, receipt = builder.build(spec, FormIdMap(Path(tmp)/'f.json', 'NpcFixture.esp'))
+        actor = next(r for r, _ in codec.parse(data).records() if r.type == 'NPC_')
+        self.assertEqual(actor.get('AIDT'), bytes(range(4)))
+        self.assertEqual(receipt['recordCounts']['NPC_'], 1)
+
     def test_alch_is_a_generic_type(self):
         # The Salvatore "Ganacci Remote" aid item is an ALCH cloned from a vanilla template.
         self.assertIn('ALCH', generic.GENERIC_TYPES)

@@ -1,3 +1,111 @@
+# Console wire-v2 acceptance - 24 October 2026
+
+Fresh MCP setup/readiness and disposable live test passed: anchor0D/probe0E,
+item count0/1/0, equipped condition66%, absolute health~99, authorized coc
+cell/loading verification and new runtime context/epoch. Same key returned prior
+receipt; old target refused without a new inbox. Exact decimal-string process
+identity preserved. Normal exit and activation/file restoration completed.
+Existing workshop game/companion files were preserved. See current STATUS.md
+for exact final tests/package hashes; earlier 42-tool beta evidence is historical.
+
+# 24 October 2026 - local beta feedback checks
+
+Unpublished working tree; beta feedback precedes GitHub approval.
+- Live disposable nine-script dependency compile completed, rebuilt and installed
+  with full saved-script proof; no manual Save/Exit/Next intervention.
+- Live two-script fixture including PlayerRef compiled consecutively and completed.
+- Intentional bad source retained Save Current Script prompt; bytecode stayed zero.
+  Owner explicitly discarded that test and exited; reviewed release completed.
+  This test did not display a separate compiler-error dialog.
+- Private report artifact read-only comparison: compression-only NPC flag delta
+  now passes; zero semantic differences/missing records. Private artifact unchanged.
+- Hidden script HWND/native source guards, load ownership/context/deadline,
+  canonical diff review, PlayerRef narrow exception and CLI transient parsing
+  have offline regression coverage. See current STATUS.md for final counts/paths.
+- Broader 32/64 KiB shapes, large reference/branch workloads and controlled Shadow
+  foreground/minimized/disconnect trials remain open; no unattended guarantee.
+
+[Beta setup and review semantics](BETA-TESTING.md).
+
+# 0.4.0 candidate acceptance - 23 October 2026
+
+Current candidate is unpublished and **not release-ready**. Offline evidence is
+local under bridge/evidence/v040-*. Do not read historical live passes below as
+acceptance of this implementation.
+
+| Check | Current evidence |
+| --- | --- |
+| Fresh baseline | 201 bridge tests, 4 skipped; 6 ESP tests passed |
+| Expanded bridge suite | 246 tests, 3 skipped, passed with existing Zig 0.14.1; post-live startup fix: 15 console tests passed |
+| ESP regression | 6 passed |
+| Windows-port CI procedure | Existing windows/.venv: pip install -e ., then 23 tests passed |
+| Native helper | Actual Probe.cs in synthetic Win32 host: measured ANSI RichEdit readback through 131000 characters, root restore, known prompt/hash guard; no GECK compiler-size claim |
+| Fresh stdio MCP / CLI | Same durable checkpoint returned; discovery reports 42 tools (including four opt-in console tools) |
+| Frozen writer | HEAD versus current writer, identical frozen synthetic spec/source/FormID map: b9da443f908ebd7c1de6cd15de98c02837da2da50367887db60d87932faa8e56 |
+| Disposable acceptance inputs | Six offline-valid fixtures, nine dependent scripts each: basic, near 32/64 KiB comments, flat/long branching and 256 references |
+| Native GECK/game/Shadow conditions | Not run for this candidate; shared-session coordination required |
+| Download extraction | Local candidate source toolkit smoke results recorded in STATUS.md after packaging |
+
+Fixture generator (creates inputs only): tools/create_reliability_fixture.py.
+Prepared local inputs: bridge/state/v040-acceptance-20261022/. All use the new
+HelloReliability.esp disposable plugin. Sources, bytecode fixtures and master
+records in public tests are synthetic; no private mod data is exported.
+
+## Console scope added 23 October
+
+The separate console DLL is tested against an actual compiled synthetic xNVSE
+host. A separate real FNV/xNVSE smoke test also passed on 23 October: numeric
+GetModIndex=11, quest stopped/start/stop readback=0/1/0, stale identity refusal
+and original-key replay without re-execution. Activation restored after normal
+exit; test DLL/plugin archived. Broader GECK/Shadow gates remain pending.
+Coverage includes identity/expiry/changed-plugin rejection,
+API rejection, GetModIndex typed readback, delayed quest effect proof, duplicate
+suppression and context change during verification. Python checks cover shared
+reservation, restart idempotency, archival recovery, install ownership/backups
+and release only after normal game exit. See STATUS.md for final test counts.
+
+Real FNV gate: coordinate explicit opt-in console setup with the owner; preserve
+existing DLL/plugin/activation state. With a disposable plugin/save, verify real
+GetModIndex and an initially stopped quest becoming running on a later loop.
+Check stale target refusal, timeout/status without replay, then restore test files.
+Do not infer this pass from the fake host or earlier telemetry evidence.
+
+## Consolidated owner-coordinated live checklist
+
+1. Confirm GECK/game are available for disposable testing; finish/close ongoing
+   FNV normally. Back up any existing Data/HelloReliability.esp and any companion
+   files before changes. Record original files/hashes and restore afterward.
+2. Build/install/load the fixed nine-script fixture, compile via start/status/resume,
+   save each checkpoint, validate all full SCTX/SCHR/SCDA/FormIDs/types/references/
+   variable layouts, then verify rebuild/install record and asset receipts.
+   Use a fresh MCP server and CLI; retain independent plugin-load/compile outcomes.
+3. Repeat fixed input fixtures near 32/64 KiB and reference/branch variants. Record
+   actual source sizes/shape and native compiler errors separately from truncated
+   readback, selection delay and incomplete save. No 64 KiB limit is established.
+4. Exercise timeout/resume, known/wrong/unknown dialogs, failed close, late failure,
+   retained checkpoints, hidden-root restoration and stale-install save refusal.
+   Preserve unknown work/prompts; never force-kill an arbitrary editor session.
+5. Repeat the same workload with Shadow foregrounded and tabbed away. Separately
+   test minimized and owner disconnect/reconnect, keeping scripts/build/launch
+   state fixed. Timestamp repeated trials and record both Windows operation and
+   requesting-client survival; unavailable conditions remain recoverable/unverified.
+6. Optional companion setup requires explicit owner request: preview exact paths/
+   backups with preflight, use checked local Zig, install only with FNV closed,
+   restart through xNVSE, advance a disposable save and verify fresh telemetry/
+   current prefix. Reject old process/build/save-context mappings and unsupported
+   mixed probes. Restore original test files afterward. Vanilla manual diagnostics
+   remain available, and no console-input capability exists.
+
+Use PASS/FAIL/UNAVAILABLE per item with timestamped receipts. A screenshot or a
+successful input API return cannot establish accepted input. Complete these gates
+before calling 0.4.0 release-ready. Commit/push/merge/publication require owner approval.
+
+Record layout reference used for independent semantic validation:
+[xEdit FNV record definitions](https://github.com/TES5Edit/TES5Edit/blob/dev-4.1.6/Core/wbDefinitionsFNV.pas)
+(SCHR, SLSD/SCVR, QUST DATA). No xEdit implementation source was copied.
+
+---
+
 # Testing log
 
 ## 19 October 2026 - generalized companion live acceptance

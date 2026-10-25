@@ -6,7 +6,7 @@ This is a local stdio MCP server for the 32-bit Fallout New Vegas GECK. It was d
 
 ## Runtime diagnostics (29 bridge tools)
 
-The four vanilla tools below remain available. The server now has 31 tools total:
+The four vanilla tools below remain available. The server now has 44 tools total:
 two additional automatic snapshot/compare tools use an optional read-only xNVSE
 companion. See [automatic setup and validation limits](AUTOMATIC-RUNTIME.md).
 
@@ -210,3 +210,63 @@ GECK can take several minutes to load the master in this bottle. Transient contr
 
 On native Windows the Data list checkboxes are toggled with posted double-clicks; the real mouse cursor is not used, so you can keep working while the bridge loads a plugin (just don't click inside GECK). Each toggle is read back and retried up to 3 times.
 
+
+## Resumable compilation (0.4.0 candidate)
+
+1. Build/install/load exact bytes through the bridge. CLI: `build_plugin.py --project
+   PROFILE`, guarded `install_plugin.py`, then `live_load.py --project PROFILE`.
+2. Call `geck_compile_start(request_key=UNIQUE_KEY)` and retain its operationId.
+3. Call `geck_compile_resume(operation_id=ID)` until verified. For blocked/uncertain
+   outcomes, read `geck_compile_status` / `geck_operation_get` and its next action.
+   CLI: `compile_scripts.py --project PROFILE --operation-id ID`.
+
+`ok` means a bounded service call completed, not compilation. Pending is incomplete;
+blocked requires review; outcome_unknown requires reconciliation after dispatch;
+failed marks a released operation. Only verified sets compiled=true after saved
+SCPT, cache, rebuild, record/override roundtrip and install checks. Load verification
+is independent: a Cell View failure cannot erase saved-script proof. Per-script
+saved hashes survive restart after revalidation; provisional UI handles do not.
+
+Do not start a second compile after timeout. Unknown/unreadable dialogs remain.
+A recognized save-current-script prompt requires native owner/script/source/button
+checks. Review before recovery acknowledgment: releasing compilation requires clean
+editor/current disk hash and prevents resumption of that operation. Use
+`geck_show_windows` for root/pane/owned-modal restoration; read-only status does
+not take focus. `geck_editor_close` requests normal matching clean-session close;
+restart explicitly afterward. No automatic force-kill.
+
+## Adapter readiness and explicit setup (0.4.0 candidate)
+
+Call `geck_runtime_readiness(profile=PROFILE, expected_plugin_hash=HASH,
+adapter="xnvse")` before automatic collection. It separates configured, installed,
+live, fresh, correct process/build and verified mapping. Automatic support is one
+quest's unique quest_variable probes; mixed profiles list unsupported probes and
+constraint errors, with the manual geck_runtime_prepare route. Vanilla supports
+quest variables, item counts, disabled and dead; the user executes batches.
+
+`geck_runtime_setup_preflight(profile=PROFILE, zig_path=OPTIONAL_PATH)` previews
+prerequisites/version, exact DLL/telemetry/receipt/backup paths, build identity and
+restart/verification steps. It never builds/downloads/installs. CLI preflight:
+`runtime_companion.py --project PROFILE preflight --profile RUNTIME_JSON`.
+Explicit setup remains build with --profile/--zig, then install with a checked
+build receipt/plugin hash and FNV normally closed. Start through xNVSE and require
+fresh readiness/snapshot; installed files are insufficient.
+
+Use `geck_runtime_save_context(label=LABEL)` when the save context explicitly
+changes: older samples/mappings/baselines are rejected until fresh observation.
+Process/load epoch/plugin/companion/profile changes also invalidate mapping.
+Automatic detection of every save-context change is not implemented. Current
+prefix is shown with live process/build/sequence evidence or unverified; historical
+prefixes and file-local IDs are never runtime proof. Console execution is available through the separate opt-in console companion below;
+keyboard injection and general autonomous gameplay remain unsupported.
+
+## Owner-requested console execution (23 October)
+
+The v0.4.0 candidate now includes separate opt-in `geck_console_readiness`,
+`geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
+Read-only telemetry is unchanged. See [console setup, commands and outcome semantics](CONSOLE-COMMANDS.md).
+Real FNV acceptance is pending; this candidate is not release-ready.
+
+
+For hash-identified local beta testing, load/recovery review and canonical-field
+reconciliation, see [beta testing](../../docs/BETA-TESTING.md).

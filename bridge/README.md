@@ -35,8 +35,8 @@ python3 -m venv .venv
    .venv/bin/python esm_index.py FalloutNV.esm
    ```
 2. **Make a profile.** Copy `projects/example-<your OS>.json` to `projects/hellowasteland.json` and fix the paths.
-3. **Build the helper if it is missing.** The Nexus download ships source only (no `.exe`, to avoid antivirus false
-   positives); the GitHub repo includes a prebuilt `Probe.Mcp.exe`. On Windows this uses the C# compiler that comes with
+3. **Build the helper for this version.** Release downloads ship source only, with no DLL or EXE. Rebuild even if an
+   older Git checkout contains a helper. See [AI-assisted source setup](../docs/SOURCE-SETUP.md). On Windows this uses the C# compiler that comes with
    the .NET Framework 4 (already part of Windows):
    ```sh
    .venv\Scripts\python build_helper.py --project projects\hellowasteland.json
@@ -51,13 +51,17 @@ python3 -m venv .venv
 5. Ask your agent: *"Validate the spec, build the plugin and show me what it contains."*
    This uses `geck_spec_validate`, then `geck_plugin_build`, then `geck_plugin_inspect`, and touches nothing in the game.
 
-## The 31 tools
+## The 44 tools
 
 | Group | Tools |
 | --- | --- |
 | Offline authoring | `geck_spec_validate`, `geck_plugin_build`, `geck_plugin_inspect`, `geck_master_lookup`, `geck_plugin_install` |
 | Runtime diagnostics | `geck_runtime_prepare`, `geck_runtime_collect`, `geck_runtime_report`, `geck_runtime_close` (user-run vanilla batches; Windows item-count/delta/error acceptance passed) |
 | Automatic runtime (optional xNVSE) | `geck_runtime_snapshot`, `geck_runtime_compare` (read-only quest telemetry; [setup and validation limits](docs/AUTOMATIC-RUNTIME.md)) |
+| Compile workflow | `geck_compile_start`, `geck_compile_status`, `geck_compile_resume` |
+| Readiness/setup | `geck_runtime_readiness`, `geck_runtime_setup_preflight`, `geck_runtime_save_context` |
+| In-game console (opt-in) | `geck_console_readiness`, `geck_console_setup`, `geck_console_query`, `geck_console_execute`, `geck_console_status`, `geck_console_release` |
+| Editor lifecycle | `geck_editor_close` (normal clean-session close only) |
 | Editor state | `geck_status`, `geck_inspect_windows`, `geck_show_windows`, `geck_capabilities`, `geck_project_attach` |
 | Load & verify | `geck_plugin_load`, `geck_plugin_load_status`, `geck_cell_verify` |
 | Records | `geck_records_find`, `geck_record_read`, `geck_record_set_model`, `geck_preview_open`, `geck_preview_close` |
@@ -119,3 +123,46 @@ or a quest lookup error. EditorIDs may also be unavailable in the vanilla game c
   covers the Render Window. Look at the PNG: the tool only checks that it is not one flat colour.
 
 Docs: [docs/MCP-QUICKSTART.md](docs/MCP-QUICKSTART.md) · [docs/PHOTO.md](docs/PHOTO.md) · [docs/M1-FAST-BRIDGE.md](docs/M1-FAST-BRIDGE.md)
+
+## 0.4.0 candidate compile recovery
+
+Build/install/load first, then use `compile_scripts.py --project PROFILE` or
+`geck_compile_start`. Retain the operationId and resume it with
+`--operation-id UUID` / `geck_compile_resume`. `--status` reads local proof;
+`--once` advances one phase; `--extend-seconds 1200` explicitly extends a reviewed
+expired deadline. Pending is incomplete; blocked requires its reported next action.
+Only verified sets compiled=true after persisted source/bytecode/cache/rebuild/install.
+
+Each script is saved at a clean boundary before advancing. CP1252 source files
+are read as Unicode from RichEdit; only CRLF/CR versus LF is normalized for hashes.
+Measured/copied lengths detect truncation. SCPT verification checks EDID/FormID/type,
+SCTX, SCHR/SCDA sizes, references and semantic variable names/indices/types, ignoring
+unused SLSD padding. Spec/source/FormID/compiler/index/template changes invalidate
+reuse. Legacy caches without saved compile provenance require recompilation.
+
+Reservations span CLI/MCP clients/profiles targeting the same editor installation.
+Client restart resumes the same operation; GECK restart invalidates UI state.
+Explicitly reload the checkpoint artifact and resume to revalidate persisted work.
+Unknown dirty work/prompts remain untouched. A Save Current Script prompt is
+resolved only after native owner, exact EDID/source and Yes-button checks.
+Uncertain saves are never blindly repeated. Existing recovery acknowledgment can
+release a reviewed reservation with a clean editor/current disk hash; it retains
+historical proof and abandons that operation.
+
+Status reports loaded/installed/built hashes separately. Unknown loaded identity
+or stale loaded bytes block save. Final rebuild compares saved records/overrides
+before installation. First-class master override intents remain unsupported;
+incomplete roundtrips are refused. Restart MCP clients after changing server code.
+
+## Owner-requested console execution (23 October)
+
+The v0.4.0 candidate now includes separate opt-in `geck_console_readiness`,
+`geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
+Read-only telemetry is unchanged. See [console setup, commands and outcome semantics](docs/CONSOLE-COMMANDS.md).
+Real FNV acceptance is pending; this candidate is not release-ready.
+
+
+Console wire-v2 adds named-plugin `{form}` binding, explicitly authorized `coc`,
+typed inventory/condition reads, decimal-string `started` identity, and MCP setup.
+See [console workflows](docs/CONSOLE-COMMANDS.md); use a fresh v2 companion after
+the one-time upgrade, and never convert the process FILETIME to a JS Number.

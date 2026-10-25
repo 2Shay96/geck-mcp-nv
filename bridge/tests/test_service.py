@@ -107,6 +107,8 @@ class ServiceTests(unittest.TestCase):
         return self.service.set_model('FixtureStatic', new, old, self.hash, session, key)
 
     def test_set_then_save_and_independent_disk_read(self):
+        load = self.load('save-precondition')
+        self.service.load_status(load['operationId'])
         result = self.edit()
         self.assertEqual(result['outcome'], 'committed_in_editor')
         self.assertEqual(file_snapshot(self.p.plugin_path)[0]['sha256'], self.hash)
@@ -237,6 +239,8 @@ class ServiceTests(unittest.TestCase):
                             for s in evidence['steps']))
 
     def test_save_uses_latest_dirty_state(self):
+        load = self.load('save-precondition')
+        self.service.load_status(load['operationId'])
         original = self.transport.call
         def call(operation, *args, **kwargs):
             result = original(operation, *args, **kwargs)
@@ -255,7 +259,7 @@ class ServiceTests(unittest.TestCase):
     def test_load_dispatch_and_completion_clear_barrier(self):
         result = self.load()
         self.assertEqual(result['outcome'], 'loading', result)
-        self.assertEqual(self.service.attach('100:123')['error']['code'], 'RECOVERY_REQUIRED')
+        self.assertEqual(self.service.attach('100:123')['error']['code'], 'EDITOR_RESERVED')
         done = self.service.load_status(result['operationId'])
         self.assertTrue(done['ok'], done)
         self.assertFalse(done['data']['loading'])
@@ -264,6 +268,41 @@ class ServiceTests(unittest.TestCase):
         replay = self.load()
         self.assertTrue(replay['replayed'])
         self.assertEqual(self.transport.calls.count('data.load'), 1)
+
+    def test_load_reservation_blocks_another_project_until_complete(self):
+        result = self.load()
+        other = self.p.model_copy(update={'project_id':'other'})
+        competing = Service(other, self.transport).load_plugin('100:123',
+            'Garden of Eden Creation Kit - [Fixture.esp]', self.hash, 'compete', reload=True)
+        self.assertFalse(competing['ok'])
+        self.assertEqual(competing['error']['code'], 'EDITOR_RESERVED')
+        self.assertEqual(self.transport.calls.count('data.load'), 1)
+        self.assertTrue(self.service.load_status(result['operationId'])['ok'])
+
+    def test_external_plugin_change_requires_review_without_redispatch(self):
+        result = self.load()
+        original = self.transport.call
+        def changed(op, *args, **kw):
+            value = original(op, *args, **kw)
+            if op == 'status': value['editorTitle'] = 'Garden of Eden Creation Kit - [External.esp]'
+            return value
+        self.transport.call = changed
+        status = self.service.load_status(result['operationId'])
+        self.assertFalse(status['ok'])
+        self.assertEqual(status['error']['code'], 'LOAD_CONTEXT_CHANGED')
+        self.assertEqual(self.transport.calls.count('data.load'), 1)
+
+    def test_load_deadline_is_reviewable_while_unresponsive(self):
+        result = self.load()
+        original = self.transport.call
+        def busy(op, *args, **kw):
+            if op == 'status': raise BridgeError('EDITOR_UNRESPONSIVE', 'busy')
+            return original(op, *args, **kw)
+        self.transport.call = busy
+        with patch('geck_mcp.service.time.time', return_value=10**12):
+            status = self.service.load_status(result['operationId'])
+        self.assertFalse(status['ok'])
+        self.assertEqual(status['error']['code'], 'LOAD_REVIEW_REQUIRED')
 
     def test_load_refuses_unsaved_changes(self):
         self.transport.dirty = True
@@ -333,6 +372,8 @@ class ServiceTests(unittest.TestCase):
 
     # -- 0.2.0: optional editor session (fix 3) -------------------------------------------
     def test_session_can_be_omitted_and_is_adopted(self):
+        load = self.load('save-precondition')
+        self.service.load_status(load['operationId'])
         attached = self.service.attach(None)
         self.assertTrue(attached['ok'], attached)
         result = self.service.set_model('FixtureStatic', 'fixture\\new.nif', 'fixture\\old.nif', self.hash, None, 'k1')
@@ -437,6 +478,15 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue(shown['ok'], shown)
         self.assertEqual(self.transport.calls[-1], 'windows.show')
 
+    def test_hidden_retained_dialog_does_not_block_attach(self):
+        original = self.transport.call
+        def hidden(op, *args, **kw):
+            result = original(op, *args, **kw)
+            if op == 'status': result['windows'] = [{'class':'#32770', 'text':'Script Edit [Old *]', 'visible':False}]
+            return result
+        self.transport.call = hidden
+        self.assertTrue(self.service.attach()['ok'])
+
     def test_status_reports_hidden_render_window(self):
         original = self.transport.call
         def call(operation, *args, **kwargs):
@@ -484,7 +534,7 @@ class ServiceTests(unittest.TestCase):
         self.failing_data_load(cancel_ok=False)
         result = self.load('load-nocancel')
         self.assertEqual(result['outcome'], 'outcome_unknown')
-        self.assertEqual(self.service.attach(None)['error']['code'], 'RECOVERY_REQUIRED')
+        self.assertEqual(self.service.attach(None)['error']['code'], 'EDITOR_RESERVED')
 
     def test_load_timeout_is_never_cancelled(self):
         self.failing_data_load(uncertain=True)

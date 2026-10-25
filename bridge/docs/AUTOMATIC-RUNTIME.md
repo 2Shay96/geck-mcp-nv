@@ -131,3 +131,34 @@ pinned official compiler, verifies its hash and exercises the generated DLL.
 ABI reference: [xNVSE PluginAPI.h at 0ccd23a](https://github.com/xNVSE/NVSE/blob/0ccd23ad885ddae533c1790a3fc56cd073e38de3/nvse/nvse/PluginAPI.h).
 Only the minimal public C ABI declarations are included; no upstream implementation
 or SDK checkout is redistributed.
+
+## 0.4.0 candidate readiness and context
+
+Use geck_runtime_readiness before collection and geck_runtime_setup_preflight
+before explicit setup. Readiness separates static probe support, configured and
+installed status from fresh live process/build/mapping evidence. Mixed item-count
+and disabled/dead profiles receive an unsupported-probe list and vanilla manual
+route; automatic support remains one quest's variables. Setup preflight previews
+exact files/backups, prerequisites, compiler version and restart/verification steps.
+It never downloads, builds or installs a compiler/DLL. Explicit setup uses existing
+CLI build/install commands, with FNV normally closed.
+
+GetModIndex is a reliable lookup in a verified current runtime context. The
+optional companion already evaluates it via xNVSE APIs without console input.
+An installed DLL or a historical prefix does not prove this path is live. Current
+prefix is displayed only with a fresh verified sample and process/build/sequence
+evidence; otherwise mapping stays unverified. The read-only telemetry adapter
+does not execute commands. The owner-requested v0.4 console actuator is separate
+and requires explicit setup; see CONSOLE-COMMANDS.md.
+
+Use geck_runtime_save_context / runtime_companion.py save-context --label LABEL
+when the context explicitly changes; old samples/baselines are rejected. Companion
+process/load epoch/build/profile changes also invalidate mappings. Automatic
+detection of every save-context change is not implemented.
+
+## Owner-requested console execution (23 October)
+
+The v0.4.0 candidate now includes separate opt-in `geck_console_readiness`,
+`geck_console_execute`, `geck_console_status` and `geck_console_release` tools.
+Read-only telemetry is unchanged. See [console setup, commands and outcome semantics](CONSOLE-COMMANDS.md).
+Real FNV acceptance is pending; this candidate is not release-ready.

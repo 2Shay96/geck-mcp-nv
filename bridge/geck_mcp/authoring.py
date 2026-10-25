@@ -19,7 +19,7 @@ import tempfile
 import time
 
 from .esp import build as builder, codec, diff, generic, scripts
-from .esp.assets import AssetIndex
+from .esp.assets import AssetIndex, AssetError, nif_textures, bsa_extract
 from .esp.formids import FormIdMap, MasterIndex
 from .esp.records import SpecError
 from .esp.validate import validate
@@ -96,6 +96,61 @@ class Authoring:
         return json.loads(self.receipt_path.read_text())
 
     # -- build ---------------------------------------------------------------------------
+    def asset_manifest(self, data, assets):
+        """Content identities for referenced loose assets; archive identities remain explicit."""
+        wanted, models = set(), set()
+        for rec, _ in codec.parse(data).records():
+            for sub in rec.subrecords:
+                if sub.tag in ('MODL', 'NIFZ'):
+                    for value in sub.data.split(b'\0'):
+                        if value:
+                            models.add('meshes\\' + value.decode('cp1252'))
+                elif sub.tag in ('ICON', 'MICO') and sub.data:
+                    wanted.add('textures\\' + codec.cstring(sub.data))
+        wanted |= models
+        result = {}
+        if assets is None:
+            return {'scope': 'asset checks unavailable', 'files': {}, 'archives': []}
+        archived = {}
+        for name in assets.archives:
+            archived.update(bsa_extract(self.data_dir / name, {m for m in models if (assets.find(m) or {}).get('where') == 'bsa'}))
+        for model in sorted(models):
+            hit = assets.find(model)
+            if hit:
+                try:
+                    payload = Path(hit['path']).read_bytes() if hit['where'] == 'loose' else archived.get(model.lower())
+                    if payload is not None:
+                        wanted.update(nif_textures(payload))
+                except AssetError:
+                    pass  # validate() records this as a failure; never used to authorize installation
+        for name in assets.archives:
+            archived.update(bsa_extract(self.data_dir / name, {m for m in wanted if (assets.find(m) or {}).get('where') == 'bsa'}))
+        for relative in sorted(wanted):
+            hit = assets.find(relative)
+            result[relative.lower()] = ({'where': 'missing'} if not hit else
+                                       {'where': 'loose', 'sha256': sha(Path(hit['path']).read_bytes())}
+                                       if hit['where'] == 'loose' else {'where': 'bsa',
+                                           'sha256': sha(archived[relative.lower()]) if relative.lower() in archived else None})
+        archives = [{'name': name, 'size': (self.data_dir / name).stat().st_size,
+                     'modifiedNs': (self.data_dir / name).stat().st_mtime_ns} for name in assets.archives]
+        return {'scope': 'MODL/NIFZ models, model texture references, ICON/MICO; content hashes and archive stat identity',
+                'files': result, 'archives': archives}
+
+    def compile_context(self, spec):
+        """Conservative invalidation: any source, template, index or compiler change invalidates reuse."""
+        inputs = {'spec': spec, 'sources': {}, 'files': {}, 'formids': self.formids(spec).assigned}
+        for edid, rec in spec.get('records', {}).items():
+            if rec.get('type') == 'SCPT':
+                inputs['sources'][edid] = sha(generic.script_text(self.spec_path.parent, rec, edid, edid))
+            if rec.get('template'):
+                template = generic.load_template(rec['template'], spec['masters'][0], self.templates)
+                inputs['files']['template:' + edid] = sha(json.dumps(template, sort_keys=True).encode())
+        for path in index_files(self.project.state_dir, spec['masters']):
+            inputs['files'][str(path.resolve())] = sha(path.read_bytes())
+        for path in (self.project.helper, self.project.game_root / 'GECK.exe'):
+            inputs['files'][str(path.resolve())] = sha(path.read_bytes()) if path.exists() else None
+        return sha(json.dumps(inputs, sort_keys=True).encode())
+
     def build(self, write=False, spec_override=None, adopt=None, check_assets=True, compare=None):
         """Build (and validate) the plugin. Without write, nothing is saved (a dry run)."""
         spec = self.load_spec(spec_override)
@@ -105,11 +160,16 @@ class Authoring:
                 raise SpecError('adopt', 'FormID map already exists; adoption is only for the first build')
             builder.adopt_existing(formids, spec, Path(adopt).read_bytes())
         index = self.index(spec['masters'])
+        context = self.compile_context(spec)
+        cache = {edid: entry for edid, entry in scripts.load_cache(self.project.state_dir, spec['project_id']).items()
+                 if entry.get('provenance', {}).get('context') == context}
         data, receipt = builder.build(spec, formids, index, base_dir=self.spec_path.parent,
-                                      script_cache=scripts.load_cache(self.project.state_dir, spec['project_id']),
+                                      script_cache=cache,
                                       templates=self.templates)
         assets = AssetIndex(self.data_dir) if check_assets and self.data_dir.is_dir() else None
         receipt['validation'] = validate(data, index, assets, spec['masters'])
+        receipt['assets'] = self.asset_manifest(data, assets)
+        receipt['compileContext'] = context
         missing = [m for m in spec['masters'] if m not in index.masters]
         if missing:
             receipt['validation']['warnings'].append('no index for %s: master references unchecked '
@@ -124,8 +184,9 @@ class Authoring:
             self.build_dir.mkdir(parents=True, exist_ok=True)
             atomic_write(self.built_path, data)
             receipt['written'] = True
-            atomic_write(self.receipt_path, (json.dumps(receipt, indent=1) + '\n').encode())
             formids.save()
+            receipt['compileContext'] = self.compile_context(spec)
+            atomic_write(self.receipt_path, (json.dumps(receipt, indent=1) + '\n').encode())
         return receipt, data
 
     # -- install ---------------------------------------------------------------------------
@@ -135,6 +196,11 @@ class Authoring:
         built = self.built_path.read_bytes()
         if sha(built) != receipt['sha256']:
             raise AuthoringError('STALE_BUILD', 'build output does not match its receipt; rebuild first')
+        if receipt.get('compileContext') and self.compile_context(self.load_spec()) != receipt['compileContext']:
+            raise AuthoringError('STALE_BUILD', 'Spec/source/compiler/dependency inputs changed since build; nothing installed')
+        current_assets = self.asset_manifest(built, AssetIndex(self.data_dir) if self.data_dir.is_dir() else None)
+        if 'assets' in receipt and current_assets != receipt['assets']:
+            raise AuthoringError('STALE_ASSETS', 'Referenced assets changed since the checked build; nothing installed')
         spec_id = receipt['projectId']
         if not builder.is_generated(built, spec_id):
             raise AuthoringError('NOT_GENERATED', 'build output lacks the generated marker')
@@ -174,6 +240,9 @@ class Authoring:
                 atomic_write(backup, previous)
             if sha(backup.read_bytes()) != previous_sha:
                 raise AuthoringError('BACKUP_FAILED', 'backup verification failed; nothing installed')
+        current_sha = sha(target.read_bytes()) if target.exists() else None
+        if current_sha != previous_sha or sha(self.built_path.read_bytes()) != receipt['sha256']:
+            raise AuthoringError('STALE_INSTALL', 'Installed/build bytes changed during install preflight; nothing written')
         atomic_write(target, built)
         if sha(target.read_bytes()) != receipt['sha256']:
             raise AuthoringError('INSTALL_MISMATCH', 'installed bytes differ from the build')

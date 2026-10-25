@@ -185,7 +185,7 @@ class BuildTests(unittest.TestCase):
             (lambda s: s['records'].update(FacRmFloor01={'type': 'STAT', 'model': 'a.nif'}), 'already exists in FalloutNV.esm'),
             (lambda s: s['records'].update(CoolWorld={'type': 'STAT', 'model': 'a.nif'}), 'also used in'),
             (lambda s: s['cells']['CoolWorld']['objects'][1].update(ref_id='salvatore'), 'duplicate ref_id'),
-            (lambda s: s['records']['CoolWorldSalvatore'].update(type='NPC_'), 'records.CoolWorldSalvatore.type'),
+            (lambda s: s['records']['CoolWorldSalvatore'].update(type='DOOR'), 'records.CoolWorldSalvatore.type'),
             (lambda s: s.update(plugin='../evil.esp'), 'plugin'),
             (lambda s: s.update(extra=1), 'unknown top-level'),
         ]

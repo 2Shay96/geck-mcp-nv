@@ -44,6 +44,7 @@ class PersistentTransport:
         self._lines = None
         self._log = None
         self.started_at = None
+        self.helper_identity = None
         self.stats = {'starts': 0, 'requests': 0, 'restarts': 0, 'lastStartMs': None}
 
     # -- process management -------------------------------------------------
@@ -84,6 +85,8 @@ class PersistentTransport:
 
     def _start(self):
         started = time.monotonic()
+        if self._proc is not None or self._log is not None:
+            self._kill()  # close handles/log from a dead idle worker before replacing it
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = open(self.log_path, 'ab')
         try:
@@ -116,6 +119,7 @@ class PersistentTransport:
         self.stats['starts'] += 1
         self.stats['lastStartMs'] = round((time.monotonic() - started) * 1000)
         self.started_at = time.time()
+        self.helper_identity = {k: hello['after'].get(k) for k in ('workerPid', 'binaryPath', 'binarySha256', 'pointerBytes')}
         return hello
 
     def _kill(self):
@@ -155,11 +159,16 @@ class PersistentTransport:
     def _send(self, message):
         data = (json.dumps(message, ensure_ascii=True, separators=(',', ':')) + '\n').encode('ascii')
         try:
-            self._proc.stdin.write(data)
+            sent = 0
+            while sent < len(data):
+                count = self._proc.stdin.write(data[sent:])
+                if not count:
+                    raise BrokenPipeError('Worker input accepted no further bytes')
+                sent += count
             self._proc.stdin.flush()
         except (BrokenPipeError, OSError, ValueError) as error:
-            raise BridgeError('WORKER_DEAD', 'Worker closed its input before the request was delivered',
-                              {'error': str(error)}) from error
+            raise BridgeError('OUTCOME_UNKNOWN', 'Worker input failed; delivery cannot be disproved. Inspect before retry.',
+                              {'error': str(error)}, uncertain=True) from error
 
     def _read(self, deadline, request_id):
         """Return the next JSON response whose id matches; None on timeout or EOF."""
@@ -194,9 +203,9 @@ class PersistentTransport:
                 self._start()
             try:
                 self._send(message)
-            except BridgeError:
+            except BridgeError as error:
                 self._kill()
-                if attempt:
+                if attempt or error.uncertain:
                     raise
                 continue
             value = self._read(time.monotonic() + timeout, message['id'])
@@ -255,7 +264,7 @@ class PersistentTransport:
                 return self._roundtrip({'id': 'i%d' % next(self._ids), 'args': ['invalidate']}, 10)
 
     def describe(self):
-        return {'mode': 'persistent', 'alive': self.alive, 'startedAt': self.started_at, **self.stats}
+        return {'mode': 'persistent', 'alive': self.alive, 'startedAt': self.started_at, 'helperIdentity': self.helper_identity, **self.stats}
 
 
 class AutoTransport:
